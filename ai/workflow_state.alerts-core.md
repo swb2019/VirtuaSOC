@@ -1,10 +1,20 @@
 ﻿# State
-Phase: ARCHITECTURE
-Role: ARCHITECT
+Phase: BUILD
+Role: BUILDER
 Status: IDLE
 CurrentTask: "alerts-core-v1"
 # Plan
-- (To be filled by the ARCHITECT agent using Plan Mode.)
+## BUILD Tasks
+1. **Verify implementation** matches CONTRACT.md:
+   - `createAlert` returns `SecurityAlert` with non-empty `id`, correct fields.
+   - `filterAlertsBySeverity` filters correctly using severity order.
+2. **Expand test coverage** in `app/modules/alerts-core/tests/alerts-core.test.ts`:
+   - Add tests for all 4 severity thresholds (`low`, `medium`, `high`, `critical`).
+   - Verify empty/whitespace timestamp handling.
+   - Verify order preservation in filtering.
+3. **Run tests**: Execute `pnpm test` and ensure all tests pass.
+4. **Mark acceptance criteria** complete in module docs if all pass.
+5. **Transition to VERIFY** phase when done.
 # Rules
 - Scope of this workflow:
   - Files under app/modules/alerts-core/**
@@ -32,3 +42,11 @@ CurrentTask: "alerts-core-v1"
     - interfaces/**
 # Log
 - 2025-11-30T12:00Z INIT: Created workflow_state for alerts-core.
+- 2025-11-30 ARCHITECT: Completed architecture phase.
+  - Refined SPEC.md: Added design notes on ID generation and severity ordering.
+  - Refined CONTRACT.md: Added explicit invariants section.
+  - Created ADR-0002-alerts-core-design.md: Documented decisions on severity
+    model (string union), ID generation (timestamp+random), pure functions,
+    and no-validation policy.
+  - Updated ARCHITECTURE.md: Added alerts-core subsection with module diagram.
+  - Transitioned to BUILD phase for implementation verification and test expansion.
