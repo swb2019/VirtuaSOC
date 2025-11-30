@@ -32,3 +32,5 @@ enrichment, correlation, case management) to build on top of it without
 inheriting unnecessary dependencies. See
 [ADR-0002](../adr/ADR-0002-alerts-core-design.md) for detailed design rationale.
 
+
+

@@ -1,5 +1,5 @@
 {
-  "snapshot": "snapshot-20251130-9bcc1c8a-53bd-4b93-85e1-8ac0604bb1e7",
+  "snapshot": "snapshot-20251130-45482254-cfe5-4924-a491-43cd1d677c78",
   "install": "corepack enable && pnpm install",
   "start": "pnpm test -- --watch=false",
   "terminals": []

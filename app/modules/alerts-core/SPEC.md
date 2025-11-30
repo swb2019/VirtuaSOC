@@ -12,6 +12,14 @@ Provide core in-memory alert types and basic querying utilities for VirtuaSOC.
   - Create a new alert from input data.
   - Filter alerts by minimum severity.
 
+## Design Notes
+
+- **ID generation**: IDs are generated using timestamp + random suffix. This is
+  non-cryptographic and intended for tracking/correlation only, not security.
+- **Severity ordering**: The order `low < medium < high < critical` is an
+  internal implementation detail used by filtering; callers should not depend
+  on numeric representations.
+
 ## Acceptance Criteria
 
 - [ ] `createAlert(input)` returns a `SecurityAlert` with:
