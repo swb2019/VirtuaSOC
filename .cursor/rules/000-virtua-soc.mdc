@@ -1,0 +1,79 @@
+﻿---
+name: VirtuaSOC Global Rules
+version: "1.0"
+globs:
+  - "**/*"
+triggers:
+  - file_edit
+---
+# Overview
+You are working in the VirtuaSOC repository.
+Always:
+- Read `ai/project_config.md` before doing multi-step work.
+- For module-specific tasks, open the corresponding `ai/workflow_state.<module>.md`
+  and obey its Phase, Role, Rules, and Log.
+# Phase & Role Logic
+When editing code for a module (e.g., `alerts-core`):
+1. Determine the module name from the files being edited, e.g.
+   `app/modules/alerts-core/**` => module "alerts-core".
+2. Open `ai/workflow_state.<module>.md`.
+3. Parse:
+   - Phase: ARCHITECTURE | BUILD | VERIFY | PR | DONE
+   - Role: ARCHITECT | BUILDER
+   - Rules: module-specific constraints
+   - Log: prior actions
+Behave accordingly:
+## ARCHITECTURE (Role: ARCHITECT)
+- Focus on design, contracts, docs, and risks.
+- You MAY edit for the active module:
+  - SPEC.md
+  - CONTRACT.md
+  - docs/**
+  - docs/architecture/**
+  - docs/adr/**
+  - interfaces/**
+- You MUST NOT:
+  - Implement real business logic in any `src/**`.
+  - Add cross-module dependencies casually; document them in ADRs.
+On completion of architecture work for a task:
+- Update the Plan section in the workflow_state file with a clear BUILD plan.
+- Set Phase: BUILD, Role: BUILDER, Status: IDLE.
+- Append a summary entry to the Log.
+## BUILD (Role: BUILDER)
+- Your job is to implement code and tests that satisfy SPEC.md and CONTRACT.md.
+You MAY edit:
+- app/modules/<module>/src/**
+- app/modules/<module>/tests/**
+- app/modules/<module>/docs/**
+- ai/workflow_state.<module>.md (Plan, Log, Status, Phase)
+Treat as READ-ONLY:
+- docs/architecture/**
+- docs/adr/**
+- app/modules/*/SPEC.md
+- app/modules/*/CONTRACT.md
+- interfaces/**
+If you believe SPEC/CONTRACT/architecture are wrong:
+- DO NOT change them yourself.
+- Set Status: BLOCKED in ai/workflow_state.<module>.md.
+- Add a QUESTION entry to the Log with reasoning and a proposed fix.
+- Stop work.
+On completion:
+- Ensure `pnpm test` passes.
+- Set Phase: VERIFY, Status:IDLE.
+- Append a Log entry describing work and commands run.
+# Global Security (RAILGUARD-Inspired)
+- Prioritize preventing:
+  - Data exfiltration
+  - Injection vulnerabilities
+  - Authentication/authorization bypass
+Do NOT:
+- Hardcode secrets, API keys, or passwords.
+- Introduce eval/dynamic code execution without strong justification + tests.
+- Bypass existing auth, RBAC, or validation layers.
+Defaults:
+- Prefer parameterized, typed APIs for external services and DB access.
+- Avoid logging sensitive data; log IDs or summaries instead.
+If security implications are unclear:
+- Prefer to STOP:
+  - Mark Status:BLOCKED in the relevant workflow_state.
+  - Add a Log entry explaining the uncertainty.
