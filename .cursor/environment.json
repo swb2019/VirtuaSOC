@@ -1,10 +1,6 @@
-﻿{
-  "baseImage": "ghcr.io/cursor-images/node-20:latest",
+{
+  "snapshot": "snapshot-20251201-15a3b137-b041-49fa-a7ed-8c8417dbb12d",
   "install": "corepack enable && pnpm install",
   "start": "pnpm test -- --watch=false",
-  "persistedDirectories": ["node_modules", "coverage"],
-  "env": {
-    "NODE_ENV": "test",
-    "LOG_LEVEL": "warn"
-  }
+  "terminals": []
 }
