@@ -1,7 +1,7 @@
-﻿# State
-Phase: BUILD
+# State
+Phase: VERIFY
 Role: BUILDER
-Status: IDLE
+Status: DONE
 CurrentTask: "alerts-core-v1"
 # Plan
 ## BUILD Tasks
@@ -50,3 +50,16 @@ CurrentTask: "alerts-core-v1"
     and no-validation policy.
   - Updated ARCHITECTURE.md: Added alerts-core subsection with module diagram.
   - Transitioned to BUILD phase for implementation verification and test expansion.
+- 2025-12-07 BUILDER: Completed build phase.
+  - Verified implementation in `src/index.ts` matches CONTRACT.md:
+    - `createAlert` returns `SecurityAlert` with non-empty `id`, correct fields.
+    - `filterAlertsBySeverity` filters correctly using severity order.
+    - Empty/whitespace timestamp handling uses current time.
+  - Expanded test coverage in `tests/alerts-core.test.ts` (from 3 to 13 tests):
+    - Added tests for all 4 severity thresholds (`low`, `medium`, `high`, `critical`).
+    - Added tests for empty and whitespace-only timestamp handling.
+    - Added test for unique ID generation.
+    - Added test for order preservation in filtering.
+    - Added test for empty array input.
+  - Commands run: `pnpm test` - all 14 tests passed (2 test files).
+  - Transitioned to VERIFY phase.
