@@ -1,0 +1,21 @@
+﻿# AMD-KIT wrapper (generated)
+name: AMD Autopilot
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  autopilot:
+    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1
+    with:
+      base_ref: "main"
+      branch_prefix: "cursor/autopilot-"
+      model: ""
+      install_cmd: "pnpm install --frozen-lockfile"
+      test_cmd: "pnpm test"
+    secrets: inherit
