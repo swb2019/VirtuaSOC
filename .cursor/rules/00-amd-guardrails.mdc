@@ -1,0 +1,11 @@
+﻿---
+description: Always apply secure autonomous modular delivery guardrails.
+globs:
+alwaysApply: true
+---
+
+- Do not modify .github/workflows/** or .cursor/rules/**.
+- Never hardcode secrets.
+- Prefer small, module-scoped changes.
+- Always add/adjust tests to prove behavior.
+- If blocked, write to ai/AUTOPILOT_LOG.md and stop.

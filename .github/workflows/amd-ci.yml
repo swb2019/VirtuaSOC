@@ -1,0 +1,19 @@
+﻿# AMD-KIT wrapper (generated)
+name: AMD CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: swb2019/amd-kit/.github/workflows/amd-ci-node.yml@v1
+    with:
+      node_version: "20"
+      working_directory: "."
+      install_cmd: "pnpm install --frozen-lockfile"
+      test_cmd: "pnpm test"
+    secrets: inherit
