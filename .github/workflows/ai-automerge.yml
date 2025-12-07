@@ -1,0 +1,43 @@
+﻿name: AI - Auto-merge Cursor PRs
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-automerge:
+    if: ${{ !github.event.pull_request.draft && startsWith(github.event.pull_request.head.ref, 'cursor/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate forbidden paths were not touched
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          $paths = gh pr view $env:PR --json files -q '.files[].path'
+          $forbidden = @(
+            '^\.github/workflows/',
+            '^\.cursor/rules/'
+          )
+
+          foreach ($p in $paths) {
+            foreach ($rx in $forbidden) {
+              if ($p -match $rx) {
+                Write-Host "Forbidden path modified: $p"
+                exit 1
+              }
+            }
+          }
+
+      - name: Enable auto-merge (squash)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr merge $env:PR --auto --squash --delete-branch

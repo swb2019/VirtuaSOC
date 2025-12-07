@@ -1,0 +1,61 @@
+﻿name: AI - Heal CI (main)
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  launch:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Launch Cursor agent to heal CI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          $headers = @{ Authorization="Bearer $env:CURSOR_API_KEY"; "Content-Type"="application/json" }
+          $short = $env:HEAD_SHA.Substring(0,7)
+          $branch = "cursor/autofix-ci-$short"
+
+          $existing = gh pr list --state open --head $branch --json number -q '.[0].number'
+          if ($existing) { Write-Host "Autofix PR already open: #$existing"; exit 0 }
+
+          $prompt = @"
+You are VirtuaSOC's autonomous CI healer.
+
+CI failed on main for commit: $env:HEAD_SHA
+Failing run: $env:RUN_URL
+
+Goal:
+- Make `pnpm test` pass.
+
+Rules:
+- Do NOT modify .github/workflows/** or .cursor/rules/**.
+- Keep changes minimal and module-scoped.
+
+Steps:
+1) Reproduce locally: corepack enable; pnpm install --frozen-lockfile; pnpm test
+2) Fix the failures (code + tests).
+3) Re-run pnpm test until green.
+4) Commit to branch $branch and create a PR to main titled: "ci: heal $short".
+5) In PR body: summary + tests run.
+"@
+
+          $payload = @{
+            prompt = @{ text = $prompt }
+            source = @{ repository = "https://github.com/$env:REPO"; ref = $env:HEAD_SHA }
+            model  = "o3"
+            target = @{ autoCreatePr = $true; branchName = $branch }
+          } | ConvertTo-Json -Depth 20
+
+          $resp = Invoke-RestMethod -Method Post -Uri "https://api.cursor.com/v0/agents" -Headers $headers -Body $payload
+          Write-Host "Launched agent $($resp.id)"
+          Write-Host "Agent URL: $($resp.target.url)"

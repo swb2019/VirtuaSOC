@@ -1,0 +1,9 @@
+﻿description: Global security posture for VirtuaSOC
+globs: ["**/*"]
+alwaysApply: true
+---
+- Never hardcode secrets/tokens/keys. Never log sensitive data.
+- No eval/exec/dynamic code loading.
+- All inputs are untrusted unless explicitly proven otherwise.
+- Prefer safe defaults: strict types, parameter validation, least privilege.
+- Do not weaken security controls to “make it work”.

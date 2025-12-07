@@ -1,0 +1,65 @@
+﻿name: AI - Autopilot
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 hours
+  workflow_dispatch: {}
+
+permissions:
+  pull-requests: read
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip if an autopilot PR is already open
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $count = gh pr list --state open --search "head:cursor/autopilot-" --json number -q 'length'
+          if ([int]$count -gt 0) { Write-Host "Autopilot PR already open. Skipping."; exit 0 }
+
+      - name: Launch Cursor autopilot agent
+        shell: pwsh
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          $headers = @{ Authorization="Bearer $env:CURSOR_API_KEY"; "Content-Type"="application/json" }
+          $branch = "cursor/autopilot-$env:RUN_ID"
+
+          $prompt = @"
+You are VirtuaSOC's fully autonomous architect+builder.
+
+Read and follow:
+- ai/PRODUCT.md
+- ai/AUTOPILOT.md
+- .cursor/rules/**
+
+Non-negotiable:
+- Never ask the user questions. If blocked: write ai/AUTOPILOT_LOG.md and stop.
+- Do NOT modify .github/workflows/** or .cursor/rules/**.
+
+Deliver exactly ONE module capsule this run:
+- Update/create: app/modules/<module>/{SPEC.md,CONTRACT.md,docs/README.md,src/,tests/}
+- Ensure `pnpm test` is green.
+
+Process:
+1) Pick next smallest/highest-value task from ai/PRODUCT.md.
+2) Write/update SPEC.md and CONTRACT.md first (“frozen contract”).
+3) Implement to satisfy the contract; add tests + docs.
+4) Run: corepack enable; pnpm install --frozen-lockfile; pnpm test
+5) Create a PR to main with summary + acceptance checklist + tests run.
+"@
+
+          $payload = @{
+            prompt = @{ text = $prompt }
+            source = @{ repository = "https://github.com/$env:REPO"; ref = "main" }
+            model  = "o3"
+            target = @{ autoCreatePr = $true; branchName = $branch }
+          } | ConvertTo-Json -Depth 20
+
+          $resp = Invoke-RestMethod -Method Post -Uri "https://api.cursor.com/v0/agents" -Headers $headers -Body $payload
+          Write-Host "Launched autopilot agent $($resp.id)"
+          Write-Host "Agent URL: $($resp.target.url)"

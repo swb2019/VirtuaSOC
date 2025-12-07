@@ -1,0 +1,11 @@
+﻿description: Fully autonomous modular delivery constraints
+globs: ["**/*"]
+alwaysApply: true
+---
+- Never ask the user questions. If blocked, write a clear entry to ai/AUTOPILOT_LOG.md and stop.
+- Do NOT modify:
+  - .github/workflows/**
+  - .cursor/rules/**
+- Prefer small, vertically complete changes:
+  spec -> contract -> code -> tests -> docs -> (green) pnpm test
+- Every new feature must ship with tests.

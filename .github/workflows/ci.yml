@@ -1,27 +1,25 @@
 ﻿name: CI
-
 on:
   push:
-    branches: [ main, "ai/**" ]
+    branches: [ main ]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
-
+          node-version: 22
+          cache: pnpm
       - name: Enable corepack
         run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run tests
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Test
         run: pnpm test
