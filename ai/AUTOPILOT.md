@@ -1,6 +1,6 @@
 ﻿# Autopilot Protocol (Cursor Background Agents)
 
-A “module capsule” is complete when:
+A module capsule is complete when:
 - SPEC.md updated with acceptance criteria
 - CONTRACT.md updated with explicit API boundaries
 - Implementation in src/
@@ -15,4 +15,4 @@ Forbidden:
 - Editing .github/workflows/** or .cursor/rules/**
 
 Merge policy:
-- Cursor PRs are auto-merged only if CI + Security checks pass and forbidden paths weren’t touched.
+- Cursor PRs are auto-merged only if CI + Security checks pass and forbidden paths werent touched.

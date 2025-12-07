@@ -6,4 +6,4 @@ alwaysApply: true
 - No eval/exec/dynamic code loading.
 - All inputs are untrusted unless explicitly proven otherwise.
 - Prefer safe defaults: strict types, parameter validation, least privilege.
-- Do not weaken security controls to “make it work”.
+- Do not weaken security controls to make it work.

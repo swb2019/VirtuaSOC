@@ -47,7 +47,7 @@ Deliver exactly ONE module capsule this run:
 
 Process:
 1) Pick next smallest/highest-value task from ai/PRODUCT.md.
-2) Write/update SPEC.md and CONTRACT.md first (“frozen contract”).
+2) Write/update SPEC.md and CONTRACT.md first (frozen contract).
 3) Implement to satisfy the contract; add tests + docs.
 4) Run: corepack enable; pnpm install --frozen-lockfile; pnpm test
 5) Create a PR to main with summary + acceptance checklist + tests run.
