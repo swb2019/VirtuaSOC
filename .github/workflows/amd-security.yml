@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   security:
-    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1
+    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1.1
     with:
       enable_codeql: true
       codeql_languages: "javascript-typescript"
