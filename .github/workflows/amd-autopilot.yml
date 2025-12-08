@@ -18,4 +18,5 @@ jobs:
       model: ""
       install_cmd: "pnpm install --frozen-lockfile"
       test_cmd: "pnpm test"
-    secrets: inherit
+    secrets:
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
