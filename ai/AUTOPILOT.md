@@ -1,11 +1,24 @@
-﻿# Autopilot Protocol (AMD)
+﻿<!-- AMD-MANAGED:AUTOPILOT v1 -->
+# AMD Autopilot Protocol (Backlog-driven)
 
-The autopilot agent must:
-1) Pick ONE module capsule per run.
-2) Update/author SPEC.md and CONTRACT.md first.
-3) Implement code + tests + docs.
-4) Keep changes minimal and localized.
-5) Update ai/AUTOPILOT_LOG.md with actions + outcomes.
-6) Never modify:
-   - .github/workflows/**
-   - .cursor/rules/**
+## Absolute rules
+- Never modify:
+  - .github/workflows/**
+  - .cursor/rules/**
+- Work in **small commits**.
+- Always add/adjust tests to prove behavior.
+
+## What to do on every run (no user interaction)
+1. Read i/PRODUCT.md and i/BACKLOG.md.
+2. Select the **first** unchecked backlog item.
+3. If the item introduces a new module:
+   - Create pp/modules/<module>/{SPEC.md,CONTRACT.md,src,tests,docs}
+   - Fill SPEC+CONTRACT before logic.
+4. Implement until tests pass (pnpm test).
+5. Update:
+   - i/BACKLOG.md (check off the item)
+   - i/AUTOPILOT_LOG.md (append: date, item, PR link, result)
+6. Open a PR.
+
+## Stop conditions
+- If blocked by ambiguity or missing dependencies, write the blocker in i/AUTOPILOT_LOG.md and stop.
