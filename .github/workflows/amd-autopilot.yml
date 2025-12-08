@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   autopilot:
-    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.2
+    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.3
     with:
       base_ref: "main"
       branch_prefix: "cursor/autopilot-"
@@ -20,4 +20,5 @@ jobs:
       test_cmd: "pnpm test"
     secrets:
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+
 

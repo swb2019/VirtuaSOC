@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   test:
-    uses: swb2019/amd-kit/.github/workflows/amd-ci-node.yml@v1.2
+    uses: swb2019/amd-kit/.github/workflows/amd-ci-node.yml@v1.3
     with:
       node_version: "20"
       working_directory: "."
       install_cmd: "pnpm install --frozen-lockfile"
       test_cmd: "pnpm test"
     secrets: inherit
+
 
