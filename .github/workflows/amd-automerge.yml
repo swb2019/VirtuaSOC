@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   automerge:
-    uses: swb2019/amd-kit/.github/workflows/amd-automerge.yml@v1.1
+    uses: swb2019/amd-kit/.github/workflows/amd-automerge.yml@v1.2
     with:
       pr_number: ${{ github.event.pull_request.number }}
       head_ref: ${{ github.event.pull_request.head.ref }}
@@ -18,3 +18,4 @@ jobs:
       allowed_head_prefix: "cursor/"
       forbidden_regex: "^(\\.github/workflows/|\\.cursor/rules/)"
     secrets: inherit
+
