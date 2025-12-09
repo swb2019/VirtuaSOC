@@ -1,11 +1,11 @@
-﻿<!-- AMD-MANAGED:BACKLOG v1 -->
+<!-- AMD-MANAGED:BACKLOG v1 -->
 # VirtuaSOC Backlog (Autonomous)
 
 **Rule:** Each Autopilot run completes **exactly one** unchecked item as a PR.
 After merge, mark the item as done and append to i/AUTOPILOT_LOG.md.
 
 ## 0) Bootstrap (architecture first)
-- [ ] Create docs/architecture/ARCHITECTURE.md (C4 context + container diagrams in Mermaid) and ADR 0001 (module boundaries & patterns).
+- [x] Create docs/architecture/ARCHITECTURE.md (C4 context + container diagrams in Mermaid) and ADR 0001 (module boundaries & patterns).
 
 ## 1) Core domain modules
 - [ ] Finish lerts-core: implement alert creation + severity filtering; make all tests green.
