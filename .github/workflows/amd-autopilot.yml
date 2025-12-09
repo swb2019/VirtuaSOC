@@ -2,6 +2,7 @@
 name: AMD Autopilot (Reusable)
 
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       base_ref:
@@ -110,3 +111,4 @@ jobs:
           $json = $body | ConvertTo-Json -Depth 50
           Invoke-RestMethod -Method Post -Uri "https://api.cursor.com/v0/agents" -Headers $headers -Body $json | ConvertTo-Json -Depth 20 | Write-Host
 '@ | Set-Content -Encoding UTF8 .github/workflows/amd-autopilot.yml
+
