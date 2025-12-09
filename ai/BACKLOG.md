@@ -1,21 +1,43 @@
-﻿<!-- AMD-MANAGED:BACKLOG v1 -->
-# VirtuaSOC Backlog (Autonomous)
+﻿<!-- AMD-MANAGED:BACKLOG v2 -->
+# Backlog (Autonomous)
 
-**Rule:** Each Autopilot run completes **exactly one** unchecked item as a PR.
-After merge, mark the item as done and append to i/AUTOPILOT_LOG.md.
+**Rule:** each Autopilot run completes exactly ONE unchecked item as a PR.
 
-## 0) Bootstrap (architecture first)
-- [ ] Create docs/architecture/ARCHITECTURE.md (C4 context + container diagrams in Mermaid) and ADR 0001 (module boundaries & patterns).
+## 0) Keep CI green (so automation never stalls)
+- [ ] Fix any failing tests on main/PRs so AMD CI is green by default (start with alerts-core if failing).
 
-## 1) Core domain modules
-- [ ] Finish lerts-core: implement alert creation + severity filtering; make all tests green.
-- [ ] Create ingest-core: canonical event type + strict parsers (JSON) + tests.
-- [ ] Create detections-core: rule interface + simple correlation (e.g., burst by src/ip) + tests.
-- [ ] Create cases-core: case lifecycle (open/triage/closed) + assignment + tests.
+## 1) Intelligence standards primitives (pure domain)
+- [ ] Create module `intel-standards` with:
+  - SourceReliability AF
+  - Confidence High/Moderate/Low
+  - RiskMatrix (5x5) + RiskScore
+  - ActionItem (owner, deadline)
+  + full unit tests
 
-## 2) Integration surface
-- [ ] Create pi-core: minimal REST API for ingest + query (no auth bypass; stub auth boundary + tests).
-- [ ] Create cli: CLI for ingest/query using pi-core contract.
+## 2) Product catalog as data (not code)
+- [ ] Create module `product-catalog` with typed schema + load product definitions from `ai/PRODUCT_CATALOG.md` (or a YAML/JSON file) and tests verifying mandatory elements are representable.
 
-## 3) Hardening
-- [ ] Add input schema validation utilities and safe logging redaction helpers used across modules.
+## 3) Generation pipeline (mock-first)
+- [ ] Create `generator-core` (interfaces) + `generator-huggingface` (mock provider + contract tests).
+- [ ] Create `renderer-core` to output canonical JSON + Markdown with required sections and tests.
+
+## 4) Integrations (interfaces + mocks first)
+- [ ] `integrations-notion` adapter interface + mock + tests
+- [ ] `integrations-make` webhook interface + mock + tests
+- [ ] `delivery-core` interface (email/pdf) + mock + tests
+
+## 5) MVP vertical slice: DIS
+- [ ] Implement DIS end-to-end: ingest sample inputs  generate draft  render  store artifact  deliver via mock Notion+Email; tests prove required elements exist.
+
+## 6) MVP vertical slice: Flash Alert
+- [ ] Implement Flash Alert end-to-end with event trigger pathway + risk/confidence + delivery.
+
+## 7) Web SaaS surface (minimal)
+- [ ] Add `api` (REST) to trigger runs + view run history (tests included)
+- [ ] Add `web` UI to view products and latest runs (smoke tests)
+
+## 8) Multi-tenancy (MVP)
+- [ ] Add tenant model + API-key auth per tenant (tests) and ensure all data is tenant-scoped.
+
+## 9) Scale catalog + cadences
+- [ ] Add remaining products in batches by cadence (daily/weekly/monthly/etc.) with schema validation tests.
