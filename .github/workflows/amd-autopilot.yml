@@ -1,24 +1,112 @@
-﻿# AMD-KIT wrapper (generated)
-name: AMD Autopilot
+﻿@'
+name: AMD Autopilot (Reusable)
+
 on:
-  schedule:
-    - cron: "17 */6 * * *"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      base_ref:
+        type: string
+        required: false
+        default: "main"
+      branch_prefix:
+        type: string
+        required: false
+        default: "cursor/autopilot-"
+      model:
+        type: string
+        required: false
+        default: ""
+      install_cmd:
+        type: string
+        required: false
+        default: "pnpm install --frozen-lockfile"
+      test_cmd:
+        type: string
+        required: false
+        default: "pnpm test"
+    secrets:
+      CURSOR_API_KEY:
+        required: true
 
 permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: amd-autopilot-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
-  autopilot:
-    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.3
-    with:
-      base_ref: "main"
-      branch_prefix: "cursor/autopilot-"
-      model: ""
-      install_cmd: "pnpm install --frozen-lockfile"
-      test_cmd: "pnpm test"
-    secrets:
-      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Select target branch (continue open autopilot PR if present)
+        id: target
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_PREFIX: ${{ inputs.branch_prefix }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          $prs = gh api "repos/$env:REPO/pulls?state=open&per_page=100" | ConvertFrom-Json
+          $open = @($prs | Where-Object { $_.head.ref -like "$env:BRANCH_PREFIX*" })
 
+          if ($open.Count -gt 0) {
+            $branch = $open[0].head.ref
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "branchName=$branch"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "autoCreatePr=false"
+            Write-Host "Continuing existing autopilot branch: $branch"
+          } else {
+            $branch = "$env:BRANCH_PREFIX$env:RUN_ID"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "branchName=$branch"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "autoCreatePr=true"
+            Write-Host "Using new autopilot branch: $branch"
+          }
 
+      - name: Launch Cursor Background Agent (creates or updates PR)
+        shell: pwsh
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          BASE_REF: ${{ inputs.base_ref }}
+          BRANCH_NAME: ${{ steps.target.outputs.branchName }}
+          AUTO_CREATE_PR: ${{ steps.target.outputs.autoCreatePr }}
+          MODEL: ${{ inputs.model }}
+          INSTALL_CMD: ${{ inputs.install_cmd }}
+          TEST_CMD: ${{ inputs.test_cmd }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          $headers = @{ Authorization="Bearer $env:CURSOR_API_KEY"; "Content-Type"="application/json" }
+          $repoUrl  = "https://github.com/$env:GITHUB_REPOSITORY"
+          $autoPr   = ($env:AUTO_CREATE_PR -eq "true")
+
+          $prompt = @(
+            "You are an autonomous software engineer and architect.",
+            "",
+            "Hard rules:",
+            "- Do NOT modify .github/workflows/** or .cursor/rules/**.",
+            "- Do NOT run 'gh pr create' (PR handling is automated).",
+            "- Work in small commits.",
+            "- Prefer adding/expanding tests to prove behavior.",
+            "- If blocked, write to ai/AUTOPILOT_LOG.md and stop.",
+            "",
+            "Process:",
+            "1) Read ai/PRODUCT.md, ai/BACKLOG.md, ai/AUTOPILOT.md.",
+            "2) If CI is failing, fix it first.",
+            "3) Deliver the next backlog item as a module capsule (SPEC/CONTRACT/src/tests/docs).",
+            ("4) Run install: {0}" -f $env:INSTALL_CMD),
+            ("5) Run tests:   {0}" -f $env:TEST_CMD),
+            "6) Update ai/AUTOPILOT_LOG.md (append only)."
+          ) -join "`n"
+
+          $body = @{
+            prompt = @{ text = $prompt }
+            source = @{ repository = $repoUrl; ref = $env:BASE_REF }
+            target = @{ autoCreatePr = $autoPr; branchName = $env:BRANCH_NAME }
+          }
+          if ($env:MODEL -and $env:MODEL.Trim()) { $body.model = $env:MODEL.Trim() }
+
+          $json = $body | ConvertTo-Json -Depth 50
+          Invoke-RestMethod -Method Post -Uri "https://api.cursor.com/v0/agents" -Headers $headers -Body $json | ConvertTo-Json -Depth 20 | Write-Host
+'@ | Set-Content -Encoding UTF8 .github/workflows/amd-autopilot.yml

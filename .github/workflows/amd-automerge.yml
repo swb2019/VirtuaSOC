@@ -1,22 +1,59 @@
-﻿# AMD-KIT wrapper (generated)
-name: AMD Auto-merge Cursor PRs
-on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+﻿@'
+name: AMD Auto-merge (Reusable)
 
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        type: number
+        required: true
+      head_ref:
+        type: string
+        required: true
+      is_draft:
+        type: boolean
+        required: true
+      allowed_head_prefix:
+        type: string
+        required: false
+        default: "cursor/"
+      forbidden_regex:
+        type: string
+        required: false
+        default: "^(\\.github/workflows/|\\.cursor/rules/)"
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  automerge:
-    uses: swb2019/amd-kit/.github/workflows/amd-automerge.yml@v1.3
-    with:
-      pr_number: ${{ github.event.pull_request.number }}
-      head_ref: ${{ github.event.pull_request.head.ref }}
-      is_draft: ${{ github.event.pull_request.draft }}
-      allowed_head_prefix: "cursor/"
-      forbidden_regex: "^(\\.github/workflows/|\\.cursor/rules/)"
-    secrets: inherit
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Auto-ready + enable auto-merge if eligible
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr_number }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          IS_DRAFT: ${{ inputs.is_draft }}
+          ALLOWED_PREFIX: ${{ inputs.allowed_head_prefix }}
+          FORBIDDEN_REGEX: ${{ inputs.forbidden_regex }}
+        run: |
+          if (-not $env:HEAD_REF.StartsWith($env:ALLOWED_PREFIX)) { exit 0 }
 
+          # If draft, mark ready (autonomous flow expects PRs to merge themselves)
+          if ($env:IS_DRAFT -eq "True" -or $env:IS_DRAFT -eq "true") {
+            gh pr ready $env:PR --comment "Auto-marking ready for review (AMD autonomous flow)."
+          }
 
+          # Re-read PR after possible state change
+          $pr = gh pr view $env:PR --json isDraft,files | ConvertFrom-Json
+          if ($pr.isDraft) { exit 0 }
+
+          $paths = @($pr.files | ForEach-Object { $_.path })
+          $blocked = @($paths | Where-Object { $_ -match $env:FORBIDDEN_REGEX })
+          if ($blocked.Count -gt 0) { exit 0 }
+
+          gh pr merge $env:PR --auto --squash --delete-branch
+'@ | Set-Content -Encoding UTF8 .github/workflows/amd-automerge.yml
