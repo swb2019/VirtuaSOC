@@ -2,13 +2,13 @@
 # Intelligence Product Catalog (35)
 
 **Cadences**
-- Daily/Real-Time: 14
-- Weekly: 57
-- Monthly/Quarterly: 813
-- Annual/Strategic: 1417
-- Event-Driven/Ad-Hoc: 1826
-- Specialized: 2731
-- Short-Form Templates: 3235
+- Daily/Real-Time: 1-4
+- Weekly: 5-7
+- Monthly/Quarterly: 8-13
+- Annual/Strategic: 14-17
+- Event-Driven/Ad-Hoc: 18-26
+- Specialized: 27-31
+- Short-Form Templates: 32-35
 
 **Products**
 1. Daily Intelligence Summary (DIS)
@@ -46,3 +46,4 @@
 33. Key Judgments memo
 34. Risk Matrix one-pager
 35. Red Team / Contrarian Memo
+

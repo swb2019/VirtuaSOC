@@ -8,7 +8,7 @@
 
 ## 1) Intelligence standards primitives (pure domain)
 - [ ] Create module `intel-standards` with:
-  - SourceReliability AF
+  - SourceReliability A-F
   - Confidence High/Moderate/Low
   - RiskMatrix (5x5) + RiskScore
   - ActionItem (owner, deadline)
@@ -41,3 +41,4 @@
 
 ## 9) Scale catalog + cadences
 - [ ] Add remaining products in batches by cadence (daily/weekly/monthly/etc.) with schema validation tests.
+
