@@ -1,16 +1,10 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
   Severity,
   SecurityAlert,
 } from "../src";
-
-const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
-
-function indexOfSeverity(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
-}
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -41,30 +35,79 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
+  it("filters alerts by every severity threshold and preserves ordering", () => {
     const alerts: SecurityAlert[] = [
       createAlert({
         source: "siem",
-        message: "Info",
+        message: "Low severity",
         severity: "low",
       }),
       createAlert({
         source: "siem",
-        message: "Warning",
+        message: "Medium severity",
         severity: "medium",
       }),
       createAlert({
         source: "siem",
-        message: "Critical issue",
+        message: "High severity",
+        severity: "high",
+      }),
+      createAlert({
+        source: "siem",
+        message: "Critical severity",
         severity: "critical",
       }),
     ];
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    const expectations: Record<Severity, Severity[]> = {
+      low: ["low", "medium", "high", "critical"],
+      medium: ["medium", "high", "critical"],
+      high: ["high", "critical"],
+      critical: ["critical"],
+    };
+
+    (Object.entries(expectations) as [Severity, Severity[]][]).forEach(
+      ([threshold, expectedSeverities]) => {
+        const filtered = filterAlertsBySeverity(alerts, threshold);
+        expect(filtered.map((alert) => alert.severity)).toEqual(
+          expectedSeverities,
+        );
+      },
+    );
+  });
+
+  it("throws when createAlert receives an invalid severity", () => {
+    expect(() =>
+      createAlert({
+        source: "eds",
+        message: "Bad severity",
+        severity: "urgent" as Severity,
+      }),
+    ).toThrow(/invalid severity/i);
+  });
+
+  it("throws when filterAlertsBySeverity receives invalid data", () => {
+    const alerts: SecurityAlert[] = [
+      createAlert({
+        source: "siem",
+        message: "Legit low",
+        severity: "low",
+      }),
+    ];
+
+    expect(() =>
+      filterAlertsBySeverity(alerts, "urgent" as Severity),
+    ).toThrow(/invalid severity/i);
+
+    const invalidAlert = createAlert({
+      source: "siem",
+      message: "Invalid severity payload",
+      severity: "low",
+    });
+    Reflect.set(invalidAlert, "severity", "urgent");
+
+    expect(() =>
+      filterAlertsBySeverity([invalidAlert], "low"),
+    ).toThrow(/invalid severity/i);
   });
 });
