@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -39,6 +39,28 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("trims and validates provided timestamps", () => {
+    const ts = " 2025-11-30T00:00:00.000Z ";
+    const alert = createAlert({
+      source: "siem",
+      message: "Trimmed timestamp",
+      severity: "medium",
+      timestamp: ts,
+    });
+    expect(alert.timestamp).toBe("2025-11-30T00:00:00.000Z");
+  });
+
+  it("rejects invalid timestamp input", () => {
+    expect(() =>
+      createAlert({
+        source: "siem",
+        message: "Bad timestamp",
+        severity: "low",
+        timestamp: "not-a-date",
+      }),
+    ).toThrow(/invalid timestamp/i);
   });
 
   it("filters alerts by minimum severity", () => {

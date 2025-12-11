@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -10,6 +10,9 @@ export interface SecurityAlert {
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 
+const ISO_8601_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
+
 function severityRank(severity: Severity): number {
   return SEVERITY_ORDER.indexOf(severity);
 }
@@ -17,6 +20,23 @@ function severityRank(severity: Severity): number {
 function generateAlertId(): string {
   // Simple, deterministic-enough ID for our purposes.
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function resolveTimestamp(rawTimestamp?: string): string {
+  const trimmed = rawTimestamp?.trim();
+  if (!trimmed) {
+    return new Date().toISOString();
+  }
+
+  const parsedTime = new Date(trimmed);
+  const isIsoFormatted = ISO_8601_REGEX.test(trimmed);
+  if (Number.isNaN(parsedTime.getTime()) || !isIsoFormatted) {
+    throw new Error(
+      `Invalid timestamp "${rawTimestamp}" (expected ISO 8601 string)`,
+    );
+  }
+
+  return trimmed;
 }
 
 /**
@@ -32,10 +52,7 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
-  const timestamp =
-    input.timestamp && input.timestamp.trim().length > 0
-      ? input.timestamp
-      : new Date().toISOString();
+  const timestamp = resolveTimestamp(input.timestamp);
 
   return {
     id: generateAlertId(),
