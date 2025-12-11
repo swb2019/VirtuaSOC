@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -49,15 +49,15 @@ export function createAlert(input: {
 /**
  * Filter alerts whose severity is at least minSeverity.
  *
- * Order is preserved from the original array.
- * Severity ordering: low < medium < high < critical.
+ * Results are returned sorted by severity (low < medium < high < critical)
+ * to ensure deterministic triage output.
  */
 export function filterAlertsBySeverity(
   alerts: SecurityAlert[],
   minSeverity: Severity
 ): SecurityAlert[] {
   const minRank = severityRank(minSeverity);
-  return alerts.filter(
-    (alert) => severityRank(alert.severity) >= minRank
-  );
+  return alerts
+    .filter((alert) => severityRank(alert.severity) >= minRank)
+    .sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
 }

@@ -1,16 +1,10 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
   Severity,
   SecurityAlert,
 } from "../src";
-
-const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
-
-function indexOfSeverity(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
-}
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -41,30 +35,33 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
+  it("filters alerts by each severity threshold and returns them ordered", () => {
+    const sampleSeverities: Severity[] = [
+      "critical",
+      "low",
+      "medium",
+      "high",
+      "critical",
+      "medium",
+    ];
+    const alerts: SecurityAlert[] = sampleSeverities.map((severity, idx) =>
       createAlert({
         source: "siem",
-        message: "Info",
-        severity: "low",
+        message: `Alert ${idx}`,
+        severity,
       }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
+    );
+
+    const cases: Array<[Severity, Severity[]]> = [
+      ["low", ["low", "medium", "medium", "high", "critical", "critical"]],
+      ["medium", ["medium", "medium", "high", "critical", "critical"]],
+      ["high", ["high", "critical", "critical"]],
+      ["critical", ["critical", "critical"]],
     ];
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    cases.forEach(([threshold, expectedSeverities]) => {
+      const filtered = filterAlertsBySeverity(alerts, threshold);
+      expect(filtered.map((a) => a.severity)).toEqual(expectedSeverities);
+    });
   });
 });
