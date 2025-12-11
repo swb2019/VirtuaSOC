@@ -1,4 +1,4 @@
-﻿# Module: alerts-core
+# Module: alerts-core
 
 ## Goal
 
@@ -18,6 +18,7 @@ Provide core in-memory alert types and basic querying utilities for VirtuaSOC.
   - A non-empty `id` (string).
   - `source`, `message`, and `severity` copied from input.
   - `timestamp` as ISO 8601 string (if not provided, use current time).
+  - Provided timestamps are trimmed and validated; invalid values throw.
 - [ ] `filterAlertsBySeverity(alerts, minSeverity)` returns only alerts whose
   severity is >= `minSeverity` in the order:
   `low < medium < high < critical`.

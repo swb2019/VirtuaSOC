@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -39,6 +39,29 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("trims whitespace around provided timestamps", () => {
+    const ts = " 2025-12-01T15:00:00.000Z ";
+    const alert = createAlert({
+      source: "edr",
+      message: "Time skew detected",
+      severity: "medium",
+      timestamp: ts,
+    });
+
+    expect(alert.timestamp).toBe(ts.trim());
+  });
+
+  it("throws when provided timestamp is invalid", () => {
+    expect(() =>
+      createAlert({
+        source: "edr",
+        message: "Bad timestamp",
+        severity: "high",
+        timestamp: "not-a-real-timestamp",
+      }),
+    ).toThrow(/timestamp/i);
   });
 
   it("filters alerts by minimum severity", () => {
