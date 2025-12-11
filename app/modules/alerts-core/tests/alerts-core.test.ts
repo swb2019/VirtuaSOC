@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -41,30 +41,37 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
-      createAlert({
-        source: "siem",
-        message: "Info",
-        severity: "low",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
-    ];
+  it("uses provided id when supplied", () => {
+    const alert = createAlert({
+      id: "alert-123",
+      source: "manual-import",
+      message: "Legacy record",
+      severity: "medium",
+    });
+    expect(alert.id).toBe("alert-123");
+  });
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+  const severityCases: Array<{ min: Severity; expected: Severity[] }> = [
+    { min: "low", expected: ["low", "medium", "high", "critical"] },
+    { min: "medium", expected: ["medium", "high", "critical"] },
+    { min: "high", expected: ["high", "critical"] },
+    { min: "critical", expected: ["critical"] },
+  ];
+
+  severityCases.forEach(({ min, expected }) => {
+    it(`filters alerts when minimum severity is ${min}`, () => {
+      const alerts: SecurityAlert[] = SEVERITY_ORDER.map((severity, index) =>
+        createAlert({
+          source: "siem",
+          message: `Alert-${severity}`,
+          severity,
+          timestamp: `2025-12-0${index + 1}T00:00:00.000Z`,
+        }),
+      );
+
+      const filtered = filterAlertsBySeverity(alerts, min);
+      expect(filtered.map((a) => a.severity)).toEqual(expected);
+      expect(filtered.every((a) => indexOfSeverity(a.severity) >= indexOfSeverity(min))).toBe(true);
+    });
   });
 });
