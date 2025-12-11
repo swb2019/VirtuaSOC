@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -27,18 +27,23 @@ function generateAlertId(): string {
  * - Uses the provided timestamp or the current time in ISO 8601.
  */
 export function createAlert(input: {
+  id?: string;
   source: string;
   message: string;
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
+  const id =
+    input.id && input.id.trim().length > 0
+      ? input.id
+      : generateAlertId();
   const timestamp =
     input.timestamp && input.timestamp.trim().length > 0
       ? input.timestamp
       : new Date().toISOString();
 
   return {
-    id: generateAlertId(),
+    id,
     source: input.source,
     message: input.message,
     severity: input.severity,
