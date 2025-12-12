@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -12,6 +12,15 @@ const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 
 function severityRank(severity: Severity): number {
   return SEVERITY_ORDER.indexOf(severity);
+}
+
+function normalizeTimestamp(timestamp?: string | null): string | undefined {
+  if (timestamp == null) {
+    return undefined;
+  }
+
+  const trimmed = timestamp.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function generateAlertId(): string {
@@ -33,9 +42,7 @@ export function createAlert(input: {
   timestamp?: string;
 }): SecurityAlert {
   const timestamp =
-    input.timestamp && input.timestamp.trim().length > 0
-      ? input.timestamp
-      : new Date().toISOString();
+    normalizeTimestamp(input.timestamp) ?? new Date().toISOString();
 
   return {
     id: generateAlertId(),

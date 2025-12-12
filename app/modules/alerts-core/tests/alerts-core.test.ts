@@ -1,16 +1,40 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
-  Severity,
   SecurityAlert,
 } from "../src";
 
-const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
-
-function indexOfSeverity(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
-}
+const SAMPLE_ALERTS: SecurityAlert[] = [
+  {
+    id: "alert-low",
+    source: "siem",
+    message: "Informational",
+    severity: "low",
+    timestamp: "2025-01-01T00:00:00.000Z",
+  },
+  {
+    id: "alert-medium",
+    source: "siem",
+    message: "Warning",
+    severity: "medium",
+    timestamp: "2025-01-02T00:00:00.000Z",
+  },
+  {
+    id: "alert-high",
+    source: "siem",
+    message: "High severity",
+    severity: "high",
+    timestamp: "2025-01-03T00:00:00.000Z",
+  },
+  {
+    id: "alert-critical",
+    source: "siem",
+    message: "Critical outage",
+    severity: "critical",
+    timestamp: "2025-01-04T00:00:00.000Z",
+  },
+];
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -41,30 +65,59 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
-      createAlert({
-        source: "siem",
-        message: "Info",
-        severity: "low",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
-    ];
+  it("trims provided timestamp input", () => {
+    const alert = createAlert({
+      source: "ops",
+      message: "Needs trim",
+      severity: "medium",
+      timestamp: " 2025-12-11T00:00:00.000Z ",
+    });
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    expect(alert.timestamp).toBe("2025-12-11T00:00:00.000Z");
+  });
+
+  it("falls back to generated timestamp when timestamp is whitespace", () => {
+    vi.useFakeTimers();
+    const fixedDate = new Date("2025-01-05T12:34:56.000Z");
+    vi.setSystemTime(fixedDate);
+
+    try {
+      const alert = createAlert({
+        source: "ops",
+        message: "Missing timestamp",
+        severity: "high",
+        timestamp: "   ",
+      });
+
+      expect(alert.timestamp).toBe(fixedDate.toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("filters alerts by each minimum severity threshold", () => {
+    const lowPlus = filterAlertsBySeverity(SAMPLE_ALERTS, "low");
+    expect(lowPlus.map((a) => a.id)).toEqual([
+      "alert-low",
+      "alert-medium",
+      "alert-high",
+      "alert-critical",
+    ]);
+
+    const mediumPlus = filterAlertsBySeverity(SAMPLE_ALERTS, "medium");
+    expect(mediumPlus.map((a) => a.id)).toEqual([
+      "alert-medium",
+      "alert-high",
+      "alert-critical",
+    ]);
+
+    const highPlus = filterAlertsBySeverity(SAMPLE_ALERTS, "high");
+    expect(highPlus.map((a) => a.id)).toEqual([
+      "alert-high",
+      "alert-critical",
+    ]);
+
+    const criticalOnly = filterAlertsBySeverity(SAMPLE_ALERTS, "critical");
+    expect(criticalOnly.map((a) => a.id)).toEqual(["alert-critical"]);
   });
 });
