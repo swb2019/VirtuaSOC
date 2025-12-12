@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -13,6 +13,10 @@ function indexOfSeverity(s: Severity): number {
 }
 
 describe("alerts-core", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("creates an alert with generated timestamp when not provided", () => {
     const alert = createAlert({
       source: "eds",
@@ -39,6 +43,48 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("normalizes parseable timestamps to ISO 8601", () => {
+    const alert = createAlert({
+      source: "siem",
+      message: "Offset timestamp",
+      severity: "medium",
+      timestamp: "2025-12-12T10:00:00-05:00",
+    });
+
+    expect(alert.timestamp).toBe("2025-12-12T15:00:00.000Z");
+  });
+
+  it("falls back to generated timestamp when timestamp is blank", () => {
+    const fixedNow = new Date("2025-12-12T10:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    const alert = createAlert({
+      source: "feed",
+      message: "missing timestamp",
+      severity: "low",
+      timestamp: "   ",
+    });
+
+    expect(alert.timestamp).toBe(fixedNow.toISOString());
+  });
+
+  it("falls back to generated timestamp when timestamp is invalid", () => {
+    const fixedNow = new Date("2025-12-13T03:21:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    const alert = createAlert({
+      source: "feed",
+      message: "bad timestamp",
+      severity: "low",
+      // Intentionally invalid.
+      timestamp: "not-a-date",
+    });
+
+    expect(alert.timestamp).toBe(fixedNow.toISOString());
   });
 
   it("filters alerts by minimum severity", () => {
