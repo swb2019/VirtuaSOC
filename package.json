@@ -1,6 +1,6 @@
-﻿{
-  "name": "VirtuaSOC",
-  "version": "0.1.0",
+{
+  "name": "virtua-soc",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "test": "vitest run",
@@ -10,5 +10,5 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
-  },
   }
+}
