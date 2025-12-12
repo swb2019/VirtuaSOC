@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -66,5 +66,34 @@ describe("alerts-core", () => {
         (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
       ),
     ).toBe(true);
+  });
+
+  it("throws when creating an alert with invalid severity", () => {
+    expect(() =>
+      createAlert({
+        source: "eds",
+        message: "Invalid severity sample",
+        severity: "urgent" as Severity,
+      }),
+    ).toThrowError(/invalid severity/i);
+  });
+
+  it("throws when filtering with an invalid minimum severity", () => {
+    const alerts = [
+      createAlert({
+        source: "siem",
+        message: "Info",
+        severity: "low",
+      }),
+      createAlert({
+        source: "siem",
+        message: "Warning",
+        severity: "medium",
+      }),
+    ];
+
+    expect(() =>
+      filterAlertsBySeverity(alerts, "urgent" as Severity),
+    ).toThrowError(/invalid severity/i);
   });
 });
