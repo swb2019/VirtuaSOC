@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -39,6 +39,52 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("normalizes whitespace-padded timestamps", () => {
+    const rawTs = " 2025-10-02T05:06:07Z  ";
+    const expected = new Date("2025-10-02T05:06:07Z").toISOString();
+    const alert = createAlert({
+      source: "edr",
+      message: "Whitespaced timestamp",
+      severity: "medium",
+      timestamp: rawTs,
+    });
+    expect(alert.timestamp).toBe(expected);
+  });
+
+  it("falls back to generated timestamp when provided timestamp is invalid", () => {
+    const fixedNow = new Date("2025-12-01T12:34:56.789Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+    try {
+      const alert = createAlert({
+        source: "eds",
+        message: "Bad timestamp",
+        severity: "high",
+        timestamp: "not-a-date",
+      });
+      expect(alert.timestamp).toBe(fixedNow.toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats blank timestamp as missing input", () => {
+    const fixedNow = new Date("2025-12-05T08:09:10.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+    try {
+      const alert = createAlert({
+        source: "soar",
+        message: "Blank timestamp",
+        severity: "critical",
+        timestamp: "   ",
+      });
+      expect(alert.timestamp).toBe(fixedNow.toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("filters alerts by minimum severity", () => {
