@@ -1,20 +1,20 @@
-﻿# State
-Phase: BUILD
-Role: BUILDER
-Status: IDLE
+# State
+Phase: VERIFY
+Role: VERIFIER
+Status: READY
 CurrentTask: "alerts-core-v1"
 # Plan
 ## BUILD Tasks
-1. **Verify implementation** matches CONTRACT.md:
+1. ✅ **Verify implementation** matches CONTRACT.md:
    - `createAlert` returns `SecurityAlert` with non-empty `id`, correct fields.
    - `filterAlertsBySeverity` filters correctly using severity order.
-2. **Expand test coverage** in `app/modules/alerts-core/tests/alerts-core.test.ts`:
-   - Add tests for all 4 severity thresholds (`low`, `medium`, `high`, `critical`).
-   - Verify empty/whitespace timestamp handling.
-   - Verify order preservation in filtering.
-3. **Run tests**: Execute `pnpm test` and ensure all tests pass.
-4. **Mark acceptance criteria** complete in module docs if all pass.
-5. **Transition to VERIFY** phase when done.
+2. ✅ **Expand test coverage** in `app/modules/alerts-core/tests/alerts-core.test.ts`:
+   - Added tests for all 4 severity thresholds (`low`, `medium`, `high`, `critical`).
+   - Verified empty/whitespace timestamp handling.
+   - Verified order preservation in filtering.
+3. ✅ **Run tests**: Executed `pnpm test` and ensured all tests pass (2025-12-12).
+4. ✅ **Mark acceptance criteria** complete in module docs if all pass.
+5. ✅ **Transition to VERIFY** phase when done.
 # Rules
 - Scope of this workflow:
   - Files under app/modules/alerts-core/**
@@ -50,3 +50,4 @@ CurrentTask: "alerts-core-v1"
     and no-validation policy.
   - Updated ARCHITECTURE.md: Added alerts-core subsection with module diagram.
   - Transitioned to BUILD phase for implementation verification and test expansion.
+- 2025-12-12 BUILDER: Expanded alerts-core tests for timestamp fallback, severity thresholds, and order preservation; `pnpm test` green. Transitioning to VERIFY phase.
