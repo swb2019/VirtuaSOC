@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -13,58 +13,98 @@ function indexOfSeverity(s: Severity): number {
 }
 
 describe("alerts-core", () => {
-  it("creates an alert with generated timestamp when not provided", () => {
-    const alert = createAlert({
-      source: "eds",
-      message: "Suspicious login",
-      severity: "high",
+  describe("createAlert", () => {
+    it("creates an alert with generated timestamp when not provided", () => {
+      const alert = createAlert({
+        source: "eds",
+        message: "Suspicious login",
+        severity: "high",
+      });
+
+      expect(alert.id).toBeTypeOf("string");
+      expect(alert.id.length).toBeGreaterThan(0);
+      expect(alert.source).toBe("eds");
+      expect(alert.message).toBe("Suspicious login");
+      expect(alert.severity).toBe("high");
+
+      const date = new Date(alert.timestamp);
+      expect(isNaN(date.getTime())).toBe(false);
     });
 
-    expect(alert.id).toBeTypeOf("string");
-    expect(alert.id.length).toBeGreaterThan(0);
-    expect(alert.source).toBe("eds");
-    expect(alert.message).toBe("Suspicious login");
-    expect(alert.severity).toBe("high");
-
-    const date = new Date(alert.timestamp);
-    expect(isNaN(date.getTime())).toBe(false);
-  });
-
-  it("respects provided timestamp", () => {
-    const ts = "2025-11-30T00:00:00.000Z";
-    const alert = createAlert({
-      source: "siem",
-      message: "Test alert",
-      severity: "low",
-      timestamp: ts,
-    });
-    expect(alert.timestamp).toBe(ts);
-  });
-
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
-      createAlert({
+    it("respects provided timestamp", () => {
+      const ts = "2025-11-30T00:00:00.000Z";
+      const alert = createAlert({
         source: "siem",
-        message: "Info",
+        message: "Test alert",
         severity: "low",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
+        timestamp: ts,
+      });
+      expect(alert.timestamp).toBe(ts);
+    });
+
+    it("trims any surrounding whitespace on provided timestamp", () => {
+      const tsWithWhitespace = "  2025-12-01T12:00:00.000Z  ";
+      const alert = createAlert({
+        source: "soc",
+        message: "Whitespace timestamp",
         severity: "medium",
+        timestamp: tsWithWhitespace,
+      });
+
+      expect(alert.timestamp).toBe(tsWithWhitespace.trim());
+    });
+  });
+
+  describe("filterAlertsBySeverity", () => {
+    const sampleAlerts: SecurityAlert[] = [
+      createAlert({
+        source: "siem",
+        message: "Low alert",
+        severity: "low",
+        timestamp: "2025-01-01T00:00:00.000Z",
       }),
       createAlert({
         source: "siem",
-        message: "Critical issue",
+        message: "Medium alert",
+        severity: "medium",
+        timestamp: "2025-01-02T00:00:00.000Z",
+      }),
+      createAlert({
+        source: "siem",
+        message: "High alert",
+        severity: "high",
+        timestamp: "2025-01-03T00:00:00.000Z",
+      }),
+      createAlert({
+        source: "siem",
+        message: "Critical alert",
         severity: "critical",
+        timestamp: "2025-01-04T00:00:00.000Z",
       }),
     ];
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    const thresholdExpectations: Array<[Severity, Severity[]]> = [
+      ["low", ["low", "medium", "high", "critical"]],
+      ["medium", ["medium", "high", "critical"]],
+      ["high", ["high", "critical"]],
+      ["critical", ["critical"]],
+    ];
+
+    it.each(thresholdExpectations)(
+      "returns alerts whose severity is >= %s",
+      (threshold, expectedSeverities) => {
+        const filtered = filterAlertsBySeverity(sampleAlerts, threshold);
+        expect(filtered.map((a) => a.severity)).toEqual(expectedSeverities);
+      },
+    );
+
+    it("preserves the original order of alerts", () => {
+      const filtered = filterAlertsBySeverity(sampleAlerts, "medium");
+      expect(filtered.map((alert) => alert.message)).toEqual([
+        "Medium alert",
+        "High alert",
+        "Critical alert",
+      ]);
+    });
   });
 });
