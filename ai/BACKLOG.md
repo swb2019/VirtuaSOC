@@ -1,10 +1,11 @@
-﻿<!-- AMD-MANAGED:BACKLOG v2 -->
+<!-- AMD-MANAGED:BACKLOG v2 -->
 # Backlog (Autonomous)
 
 **Rule:** each Autopilot run completes exactly ONE unchecked item as a PR.
 
 ## 0) Keep CI green (so automation never stalls)
-- [ ] Fix any failing tests on main/PRs so AMD CI is green by default (start with alerts-core if failing).
+- [x] Fix any failing tests on main/PRs so AMD CI is green by default (start with alerts-core if failing).
+  - Ensured `pnpm-lock.yaml` is tracked so `pnpm install --frozen-lockfile` succeeds in CI.
 
 ## 1) Intelligence standards primitives (pure domain)
 - [ ] Create module `intel-standards` with:
