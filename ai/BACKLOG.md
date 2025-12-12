@@ -1,4 +1,4 @@
-﻿<!-- AMD-MANAGED:BACKLOG v2 -->
+<!-- AMD-MANAGED:BACKLOG v2 -->
 # Backlog (Autonomous)
 
 **Rule:** each Autopilot run completes exactly ONE unchecked item as a PR.
@@ -7,7 +7,7 @@
 - [ ] Fix any failing tests on main/PRs so AMD CI is green by default (start with alerts-core if failing).
 
 ## 1) Intelligence standards primitives (pure domain)
-- [ ] Create module `intel-standards` with:
+- [x] Create module `intel-standards` with:
   - SourceReliability A-F
   - Confidence High/Moderate/Low
   - RiskMatrix (5x5) + RiskScore
