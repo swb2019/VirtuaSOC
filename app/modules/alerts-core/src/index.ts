@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -10,7 +10,16 @@ export interface SecurityAlert {
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 
+function assertKnownSeverity(
+  value: string,
+): asserts value is Severity {
+  if (!SEVERITY_ORDER.includes(value as Severity)) {
+    throw new Error(`Unknown severity: ${value}`);
+  }
+}
+
 function severityRank(severity: Severity): number {
+  assertKnownSeverity(severity);
   return SEVERITY_ORDER.indexOf(severity);
 }
 
@@ -32,6 +41,8 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
+  assertKnownSeverity(input.severity);
+
   const timestamp =
     input.timestamp && input.timestamp.trim().length > 0
       ? input.timestamp

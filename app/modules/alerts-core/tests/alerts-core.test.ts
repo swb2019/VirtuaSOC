@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -6,11 +6,37 @@ import {
   SecurityAlert,
 } from "../src";
 
-const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
-
-function indexOfSeverity(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
-}
+const FIXED_TIMESTAMP = "2025-01-01T00:00:00.000Z";
+const SAMPLE_ALERTS: SecurityAlert[] = [
+  {
+    id: "alert-low",
+    source: "siem",
+    message: "Low severity event",
+    severity: "low",
+    timestamp: FIXED_TIMESTAMP,
+  },
+  {
+    id: "alert-medium",
+    source: "siem",
+    message: "Medium severity event",
+    severity: "medium",
+    timestamp: FIXED_TIMESTAMP,
+  },
+  {
+    id: "alert-high",
+    source: "siem",
+    message: "High severity event",
+    severity: "high",
+    timestamp: FIXED_TIMESTAMP,
+  },
+  {
+    id: "alert-critical",
+    source: "siem",
+    message: "Critical severity event",
+    severity: "critical",
+    timestamp: FIXED_TIMESTAMP,
+  },
+];
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -41,30 +67,77 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
+  it("rejects alerts with invalid severity input", () => {
+    expect(() =>
       createAlert({
         source: "siem",
-        message: "Info",
-        severity: "low",
+        message: "Bad severity",
+        severity: "urgent" as Severity,
       }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
+    ).toThrowError(/unknown severity/i);
+  });
+
+  describe("filterAlertsBySeverity", () => {
+    const cases: Array<{ minSeverity: Severity; expected: Severity[] }> = [
+      {
+        minSeverity: "low",
+        expected: ["low", "medium", "high", "critical"],
+      },
+      {
+        minSeverity: "medium",
+        expected: ["medium", "high", "critical"],
+      },
+      {
+        minSeverity: "high",
+        expected: ["high", "critical"],
+      },
+      {
+        minSeverity: "critical",
+        expected: ["critical"],
+      },
     ];
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    cases.forEach(({ minSeverity, expected }) => {
+      it(`keeps alerts for minSeverity=${minSeverity}`, () => {
+        const filtered = filterAlertsBySeverity(SAMPLE_ALERTS, minSeverity);
+        expect(filtered.map((alert) => alert.severity)).toEqual(expected);
+      });
+    });
+
+    it("returns an empty list when nothing meets the threshold", () => {
+      const mediumOnly: SecurityAlert[] = [
+        {
+          id: "medium-only",
+          source: "sensor",
+          message: "only medium alerts",
+          severity: "medium",
+          timestamp: FIXED_TIMESTAMP,
+        },
+      ];
+
+      const filtered = filterAlertsBySeverity(mediumOnly, "critical");
+      expect(filtered).toHaveLength(0);
+    });
+
+    it("throws if minSeverity is unknown", () => {
+      expect(() =>
+        filterAlertsBySeverity(SAMPLE_ALERTS, "urgent" as Severity),
+      ).toThrowError(/unknown severity/i);
+    });
+
+    it("throws if an alert contains an unknown severity", () => {
+      const invalidAlerts: SecurityAlert[] = [
+        ...SAMPLE_ALERTS,
+        {
+          ...SAMPLE_ALERTS[0],
+          id: "bad-severity",
+          severity: "invalid" as Severity,
+        },
+      ];
+
+      expect(() => filterAlertsBySeverity(invalidAlerts, "low")).toThrowError(
+        /unknown severity/i,
+      );
+    });
   });
 });
