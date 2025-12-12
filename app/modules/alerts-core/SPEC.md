@@ -1,4 +1,4 @@
-﻿# Module: alerts-core
+# Module: alerts-core
 
 ## Goal
 
@@ -14,17 +14,17 @@ Provide core in-memory alert types and basic querying utilities for VirtuaSOC.
 
 ## Acceptance Criteria
 
-- [ ] `createAlert(input)` returns a `SecurityAlert` with:
+- [x] `createAlert(input)` returns a `SecurityAlert` with:
   - A non-empty `id` (string).
   - `source`, `message`, and `severity` copied from input.
   - `timestamp` as ISO 8601 string (if not provided, use current time).
-- [ ] `filterAlertsBySeverity(alerts, minSeverity)` returns only alerts whose
+- [x] `filterAlertsBySeverity(alerts, minSeverity)` returns only alerts whose
   severity is >= `minSeverity` in the order:
   `low < medium < high < critical`.
-- [ ] Unit tests for:
+- [x] Unit tests for:
   - Creating alerts with and without explicit timestamp.
   - Filtering alerts at each severity threshold.
-- [ ] `pnpm test` passes.
+- [x] `pnpm test` passes.
 
 ## Security & Compliance
 
