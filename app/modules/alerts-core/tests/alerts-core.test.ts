@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -11,6 +11,10 @@ const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 function indexOfSeverity(s: Severity): number {
   return SEVERITY_ORDER.indexOf(s);
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -39,6 +43,32 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("normalizes provided timestamps into ISO format", () => {
+    const alert = createAlert({
+      source: "siem",
+      message: "Normalized timestamp",
+      severity: "medium",
+      timestamp: "2025-11-30T00:00:00Z",
+    });
+
+    expect(alert.timestamp).toBe("2025-11-30T00:00:00.000Z");
+  });
+
+  it("falls back to current time when provided timestamp is invalid", () => {
+    vi.useFakeTimers();
+    const fixedNow = new Date("2025-02-01T10:30:00.000Z");
+    vi.setSystemTime(fixedNow);
+
+    const alert = createAlert({
+      source: "soar",
+      message: "Bad timestamp",
+      severity: "high",
+      timestamp: "not-a-date",
+    });
+
+    expect(alert.timestamp).toBe(fixedNow.toISOString());
   });
 
   it("filters alerts by minimum severity", () => {
