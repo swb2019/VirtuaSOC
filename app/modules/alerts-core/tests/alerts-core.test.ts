@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -41,11 +41,22 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
+  it("retains provided alert id when supplied", () => {
+    const alert = createAlert({
+      id: " alert-123 ",
+      source: "fusion",
+      message: "Operator created alert",
+      severity: "medium",
+    });
+
+    expect(alert.id).toBe("alert-123");
+  });
+
+  describe("filterAlertsBySeverity", () => {
     const alerts: SecurityAlert[] = [
       createAlert({
         source: "siem",
-        message: "Info",
+        message: "Informational",
         severity: "low",
       }),
       createAlert({
@@ -55,16 +66,37 @@ describe("alerts-core", () => {
       }),
       createAlert({
         source: "siem",
+        message: "Escalation",
+        severity: "high",
+      }),
+      createAlert({
+        source: "siem",
         message: "Critical issue",
         severity: "critical",
       }),
     ];
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    const cases: { min: Severity; expected: Severity[] }[] = [
+      { min: "low", expected: ["low", "medium", "high", "critical"] },
+      { min: "medium", expected: ["medium", "high", "critical"] },
+      { min: "high", expected: ["high", "critical"] },
+      { min: "critical", expected: ["critical"] },
+    ];
+
+    cases.forEach(({ min, expected }) => {
+      it(`returns alerts with severity >= ${min}`, () => {
+        const filtered = filterAlertsBySeverity(alerts, min);
+        expect(filtered.map((a) => a.severity)).toEqual(expected);
+      });
+    });
+
+    it("preserves original order", () => {
+      const filtered = filterAlertsBySeverity(alerts, "medium");
+      expect(filtered.map((a) => a.message)).toEqual([
+        "Warning",
+        "Escalation",
+        "Critical issue",
+      ]);
+    });
   });
 });
