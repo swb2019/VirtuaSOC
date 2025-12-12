@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -37,6 +37,17 @@ describe("alerts-core", () => {
       message: "Test alert",
       severity: "low",
       timestamp: ts,
+    });
+    expect(alert.timestamp).toBe(ts);
+  });
+
+  it("trims whitespace around provided timestamp", () => {
+    const ts = "2025-11-30T00:00:00.000Z";
+    const alert = createAlert({
+      source: "siem",
+      message: "Trim me",
+      severity: "medium",
+      timestamp: `  ${ts}  `,
     });
     expect(alert.timestamp).toBe(ts);
   });
