@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -41,6 +41,17 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
+  it("trims provided timestamp before storing it", () => {
+    const ts = " 2025-11-30T00:00:00.000Z ";
+    const alert = createAlert({
+      source: "siem",
+      message: "Whitespace timestamp",
+      severity: "medium",
+      timestamp: ts,
+    });
+    expect(alert.timestamp).toBe("2025-11-30T00:00:00.000Z");
+  });
+
   it("filters alerts by minimum severity", () => {
     const alerts: SecurityAlert[] = [
       createAlert({
@@ -67,4 +78,41 @@ describe("alerts-core", () => {
       ),
     ).toBe(true);
   });
+
+  it.each([
+    ["low", ["low", "medium", "high", "critical"]],
+    ["medium", ["medium", "high", "critical"]],
+    ["high", ["high", "critical"]],
+    ["critical", ["critical"]],
+  ] as [Severity, Severity[]][])(
+    "filters alerts at %s threshold",
+    (threshold, expectedSeverities) => {
+      const alerts: SecurityAlert[] = [
+        createAlert({
+          source: "siem",
+          message: "Low info",
+          severity: "low",
+        }),
+        createAlert({
+          source: "siem",
+          message: "Medium warning",
+          severity: "medium",
+        }),
+        createAlert({
+          source: "siem",
+          message: "High alert",
+          severity: "high",
+        }),
+        createAlert({
+          source: "siem",
+          message: "Critical outage",
+          severity: "critical",
+        }),
+      ];
+
+      const filtered = filterAlertsBySeverity(alerts, threshold);
+
+      expect(filtered.map((a) => a.severity)).toEqual(expectedSeverities);
+    },
+  );
 });
