@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -39,6 +39,36 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("falls back to current time when timestamp is blank", () => {
+    vi.useFakeTimers();
+    const now = new Date("2025-01-01T00:00:00.000Z");
+    vi.setSystemTime(now);
+
+    try {
+      const alert = createAlert({
+        source: "siem",
+        message: "Blank timestamp",
+        severity: "medium",
+        timestamp: "   ",
+      });
+
+      expect(alert.timestamp).toBe(now.toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("throws when provided timestamp is invalid", () => {
+    expect(() =>
+      createAlert({
+        source: "siem",
+        message: "Bad timestamp",
+        severity: "medium",
+        timestamp: "not-a-timestamp",
+      }),
+    ).toThrow(/invalid timestamp/i);
   });
 
   it("filters alerts by minimum severity", () => {
