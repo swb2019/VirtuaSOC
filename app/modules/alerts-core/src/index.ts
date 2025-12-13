@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -9,14 +9,26 @@ export interface SecurityAlert {
 }
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
+const MIN_RANDOM_SEGMENT_LENGTH = 6;
 
 function severityRank(severity: Severity): number {
   return SEVERITY_ORDER.indexOf(severity);
 }
 
+function randomSegment(): string {
+  const raw = Math.random().toString(36).slice(2);
+  if (raw.length === 0) {
+    return "alertid";
+  }
+  if (raw.length >= MIN_RANDOM_SEGMENT_LENGTH) {
+    return raw;
+  }
+  return raw.padEnd(MIN_RANDOM_SEGMENT_LENGTH, "0");
+}
+
 function generateAlertId(): string {
-  // Simple, deterministic-enough ID for our purposes.
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  // Ensure suffix always has entropy even if Math.random() returns 0.
+  return `${Date.now().toString(36)}-${randomSegment()}`;
 }
 
 /**

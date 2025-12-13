@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -66,5 +66,21 @@ describe("alerts-core", () => {
         (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
       ),
     ).toBe(true);
+  });
+
+  it("still generates ids when Math.random returns 0", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+
+    const alert = createAlert({
+      source: "eds",
+      message: "Zero random path",
+      severity: "medium",
+    });
+
+    randomSpy.mockRestore();
+
+    const [, suffix] = alert.id.split("-");
+    expect(suffix).toBeDefined();
+    expect(suffix.length).toBeGreaterThan(0);
   });
 });
