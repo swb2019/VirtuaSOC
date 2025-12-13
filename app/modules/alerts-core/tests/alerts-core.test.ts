@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -41,30 +41,64 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
-      createAlert({
-        source: "siem",
-        message: "Info",
-        severity: "low",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
-    ];
+  describe("filterAlertsBySeverity", () => {
+    const orderedAlerts: SecurityAlert[] = SEVERITY_ORDER.map(
+      (severity, idx) =>
+        createAlert({
+          source: `siem-${idx}`,
+          message: `${severity}-alert-${idx}`,
+          severity,
+        }),
+    );
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+    SEVERITY_ORDER.forEach((threshold) => {
+      it(`returns alerts at or above ${threshold}`, () => {
+        const filtered = filterAlertsBySeverity(orderedAlerts, threshold);
+        const expected = orderedAlerts.filter(
+          (alert) =>
+            indexOfSeverity(alert.severity) >= indexOfSeverity(threshold),
+        );
+
+        expect(filtered).toEqual(expected);
+      });
+    });
+
+    it("preserves the original ordering of matching alerts", () => {
+      const mixedAlerts: SecurityAlert[] = [
+        createAlert({
+          source: "siem",
+          message: "low-1",
+          severity: "low",
+        }),
+        createAlert({
+          source: "siem",
+          message: "medium-1",
+          severity: "medium",
+        }),
+        createAlert({
+          source: "siem",
+          message: "high-1",
+          severity: "high",
+        }),
+        createAlert({
+          source: "siem",
+          message: "medium-2",
+          severity: "medium",
+        }),
+        createAlert({
+          source: "siem",
+          message: "critical-1",
+          severity: "critical",
+        }),
+      ];
+
+      const filtered = filterAlertsBySeverity(mixedAlerts, "medium");
+      expect(filtered.map((alert) => alert.message)).toEqual([
+        "medium-1",
+        "high-1",
+        "medium-2",
+        "critical-1",
+      ]);
+    });
   });
 });
