@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -9,6 +9,16 @@ export interface SecurityAlert {
 }
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
+
+function isSeverity(value: string): value is Severity {
+  return SEVERITY_ORDER.includes(value as Severity);
+}
+
+function ensureSeverity(value: string, context: string): asserts value is Severity {
+  if (!isSeverity(value)) {
+    throw new Error(`Invalid severity "${value}" for ${context}`);
+  }
+}
 
 function severityRank(severity: Severity): number {
   return SEVERITY_ORDER.indexOf(severity);
@@ -32,6 +42,7 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
+  ensureSeverity(input.severity, "severity");
   const timestamp =
     input.timestamp && input.timestamp.trim().length > 0
       ? input.timestamp
@@ -56,8 +67,10 @@ export function filterAlertsBySeverity(
   alerts: SecurityAlert[],
   minSeverity: Severity
 ): SecurityAlert[] {
+  ensureSeverity(minSeverity, "minSeverity");
   const minRank = severityRank(minSeverity);
-  return alerts.filter(
-    (alert) => severityRank(alert.severity) >= minRank
-  );
+  return alerts.filter((alert, index) => {
+    ensureSeverity(alert.severity, `alerts[${index}].severity`);
+    return severityRank(alert.severity) >= minRank;
+  });
 }

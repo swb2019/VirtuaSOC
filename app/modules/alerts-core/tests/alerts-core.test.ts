@@ -1,10 +1,5 @@
-﻿import { describe, it, expect } from "vitest";
-import {
-  createAlert,
-  filterAlertsBySeverity,
-  Severity,
-  SecurityAlert,
-} from "../src";
+import { describe, it, expect } from "vitest";
+import { createAlert, filterAlertsBySeverity, Severity } from "../src";
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 
@@ -42,7 +37,7 @@ describe("alerts-core", () => {
   });
 
   it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
+    const alerts = [
       createAlert({
         source: "siem",
         message: "Info",
@@ -66,5 +61,52 @@ describe("alerts-core", () => {
         (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
       ),
     ).toBe(true);
+  });
+
+  it("throws when createAlert receives an invalid severity", () => {
+    expect(() =>
+      createAlert({
+        source: "soc",
+        message: "Bad data",
+        severity: "urgent" as Severity,
+      }),
+    ).toThrow(/invalid severity/i);
+  });
+
+  it("throws when filtering with an invalid minimum severity", () => {
+    const alerts = [
+      createAlert({
+        source: "siem",
+        message: "Critical issue",
+        severity: "critical",
+      }),
+    ];
+
+    expect(() =>
+      filterAlertsBySeverity(alerts, "urgent" as Severity),
+    ).toThrow(/invalid severity/i);
+  });
+
+  it("throws when any alert carries an invalid severity value", () => {
+    const invalidAlerts = JSON.parse(
+      JSON.stringify([
+        {
+          id: "invalid",
+          source: "siem",
+          message: "bad",
+          severity: "urgent",
+          timestamp: new Date().toISOString(),
+        },
+      ]),
+    );
+
+    const unsafeFilter = filterAlertsBySeverity as (
+      alerts: unknown,
+      minSeverity: unknown,
+    ) => unknown;
+
+    expect(() => unsafeFilter(invalidAlerts, "low")).toThrow(
+      /invalid severity/i,
+    );
   });
 });
