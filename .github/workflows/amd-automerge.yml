@@ -57,3 +57,4 @@ jobs:
 
           gh pr merge $env:PR --auto --squash --delete-branch
 '@ | Set-Content -Encoding UTF8 .github/workflows/amd-automerge.yml
+
