@@ -1,0 +1,43 @@
+name: AMD Autoready + Automerge (cursor/autopilot)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: amd-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  autoready_and_automerge:
+    if: startsWith(github.head_ref, 'cursor/autopilot-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark draft PR ready (if needed)
+        if: github.event.pull_request.draft == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr ready ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
+
+      - name: Block forbidden paths (.github/workflows, .cursor/rules)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          files=$(gh pr view "$pr" --repo "$repo" --json files --jq '.files[].path')
+          if echo "$files" | grep -E '^(\.github/workflows/|\.cursor/rules/)' >/dev/null; then
+            echo "Forbidden path change detected. Not enabling auto-merge."
+            exit 0
+          fi
+
+      - name: Enable auto-merge (squash + delete branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --auto --squash --delete-branch
