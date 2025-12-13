@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -19,6 +19,19 @@ function generateAlertId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+function resolveTimestamp(raw?: string): string {
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return new Date().toISOString();
+  }
+
+  if (Number.isNaN(Date.parse(trimmed))) {
+    throw new Error("Invalid timestamp: expected ISO 8601 string");
+  }
+
+  return trimmed;
+}
+
 /**
  * Create a SecurityAlert from input.
  *
@@ -32,17 +45,12 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
-  const timestamp =
-    input.timestamp && input.timestamp.trim().length > 0
-      ? input.timestamp
-      : new Date().toISOString();
-
   return {
     id: generateAlertId(),
     source: input.source,
     message: input.message,
     severity: input.severity,
-    timestamp,
+    timestamp: resolveTimestamp(input.timestamp),
   };
 }
 
