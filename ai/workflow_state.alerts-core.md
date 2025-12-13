@@ -1,7 +1,7 @@
-﻿# State
-Phase: BUILD
-Role: BUILDER
-Status: IDLE
+# State
+Phase: VERIFY
+Role: VERIFIER
+Status: READY
 CurrentTask: "alerts-core-v1"
 # Plan
 ## BUILD Tasks
@@ -50,3 +50,6 @@ CurrentTask: "alerts-core-v1"
     and no-validation policy.
   - Updated ARCHITECTURE.md: Added alerts-core subsection with module diagram.
   - Transitioned to BUILD phase for implementation verification and test expansion.
+- 2025-12-13 BUILD: Expanded alerts-core tests with timestamp fallback coverage,
+  exhaustive severity thresholds, and order preservation checks. `pnpm test`
+  passes; ready for VERIFY.
