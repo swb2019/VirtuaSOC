@@ -1,8 +1,8 @@
-﻿# State
-Phase: BUILD
-Role: BUILDER
-Status: IDLE
-CurrentTask: "alerts-core-v1"
+# State
+Phase: VERIFY
+Role: REVIEWER
+Status: READY
+CurrentTask: "alerts-core-v1-verify"
 # Plan
 ## BUILD Tasks
 1. **Verify implementation** matches CONTRACT.md:
@@ -50,3 +50,6 @@ CurrentTask: "alerts-core-v1"
     and no-validation policy.
   - Updated ARCHITECTURE.md: Added alerts-core subsection with module diagram.
   - Transitioned to BUILD phase for implementation verification and test expansion.
+- 2025-12-13 BUILD: Added severity threshold, whitespace timestamp, and order
+  preservation tests in `app/modules/alerts-core/tests`. Module is ready for
+  VERIFY.
