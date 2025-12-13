@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -39,6 +39,24 @@ describe("alerts-core", () => {
       timestamp: ts,
     });
     expect(alert.timestamp).toBe(ts);
+  });
+
+  it("keeps provided ids whenever present", () => {
+    const alert = createAlert({
+      id: "alert-123",
+      source: "manual",
+      message: "Operator created alert",
+      severity: "medium",
+    });
+    expect(alert.id).toBe("alert-123");
+
+    const trimmedIdAlert = createAlert({
+      id: "  alert-456 ",
+      source: "manual",
+      message: "Another alert",
+      severity: "low",
+    });
+    expect(trimmedIdAlert.id).toBe("alert-456");
   });
 
   it("filters alerts by minimum severity", () => {
