@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -9,6 +9,7 @@ export interface SecurityAlert {
 }
 
 const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
+const VALID_SEVERITIES = new Set<Severity>(SEVERITY_ORDER);
 
 function severityRank(severity: Severity): number {
   return SEVERITY_ORDER.indexOf(severity);
@@ -17,6 +18,29 @@ function severityRank(severity: Severity): number {
 function generateAlertId(): string {
   // Simple, deterministic-enough ID for our purposes.
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function ensureSeverity(value: string): Severity {
+  if (VALID_SEVERITIES.has(value as Severity)) {
+    return value as Severity;
+  }
+
+  throw new Error(
+    `Invalid severity "${value}". Expected one of: ${SEVERITY_ORDER.join(", ")}`,
+  );
+}
+
+function resolveTimestamp(timestamp?: string): string {
+  if (!timestamp || timestamp.trim().length === 0) {
+    return new Date().toISOString();
+  }
+
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Invalid timestamp "${timestamp}". Use ISO 8601.`);
+  }
+
+  return timestamp;
 }
 
 /**
@@ -32,16 +56,14 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
-  const timestamp =
-    input.timestamp && input.timestamp.trim().length > 0
-      ? input.timestamp
-      : new Date().toISOString();
+  const severity = ensureSeverity(input.severity);
+  const timestamp = resolveTimestamp(input.timestamp);
 
   return {
     id: generateAlertId(),
     source: input.source,
     message: input.message,
-    severity: input.severity,
+    severity,
     timestamp,
   };
 }
@@ -56,8 +78,11 @@ export function filterAlertsBySeverity(
   alerts: SecurityAlert[],
   minSeverity: Severity
 ): SecurityAlert[] {
-  const minRank = severityRank(minSeverity);
-  return alerts.filter(
-    (alert) => severityRank(alert.severity) >= minRank
-  );
+  const normalizedMin = ensureSeverity(minSeverity);
+  const minRank = severityRank(normalizedMin);
+
+  return alerts.filter((alert) => {
+    const severity = ensureSeverity(alert.severity);
+    return severityRank(severity) >= minRank;
+  });
 }

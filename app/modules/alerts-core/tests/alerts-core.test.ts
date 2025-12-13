@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -6,13 +6,30 @@ import {
   SecurityAlert,
 } from "../src";
 
-const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
+const buildAlerts = (): SecurityAlert[] => [
+  createAlert({
+    source: "siem",
+    message: "Low alert",
+    severity: "low",
+  }),
+  createAlert({
+    source: "siem",
+    message: "Medium alert",
+    severity: "medium",
+  }),
+  createAlert({
+    source: "siem",
+    message: "High alert",
+    severity: "high",
+  }),
+  createAlert({
+    source: "siem",
+    message: "Critical alert",
+    severity: "critical",
+  }),
+];
 
-function indexOfSeverity(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
-}
-
-describe("alerts-core", () => {
+describe("createAlert", () => {
   it("creates an alert with generated timestamp when not provided", () => {
     const alert = createAlert({
       source: "eds",
@@ -41,30 +58,63 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
+  it("rejects invalid severities", () => {
+    expect(() =>
       createAlert({
         source: "siem",
-        message: "Info",
-        severity: "low",
+        message: "Bad severity",
+        severity: "urgent" as Severity,
       }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
-    ];
+    ).toThrowError(/Invalid severity/i);
+  });
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
+  it("rejects invalid timestamps", () => {
+    expect(() =>
+      createAlert({
+        source: "siem",
+        message: "Bad timestamp",
+        severity: "low",
+        timestamp: "not-a-date",
+      }),
+    ).toThrowError(/Invalid timestamp/i);
+  });
+});
+
+describe("filterAlertsBySeverity", () => {
+  it.each([
+    ["low", ["low", "medium", "high", "critical"]],
+    ["medium", ["medium", "high", "critical"]],
+    ["high", ["high", "critical"]],
+    ["critical", ["critical"]],
+  ] as const)(
+    "returns alerts with severity >= %s",
+    (threshold, expectedSeverities) => {
+      const alerts = buildAlerts();
+      const filtered = filterAlertsBySeverity(alerts, threshold);
+      expect(filtered.map((alert) => alert.severity)).toEqual(
+        expectedSeverities,
+      );
+    },
+  );
+
+  it("throws when min severity is invalid", () => {
+    const alerts = buildAlerts();
+    expect(() =>
+      filterAlertsBySeverity(alerts, "urgent" as Severity),
+    ).toThrowError(/Invalid severity/i);
+  });
+
+  it("throws when an alert carries an invalid severity", () => {
+    const invalidAlert: any = {
+      id: "invalid",
+      source: "siem",
+      message: "Bad data",
+      severity: "unknown",
+      timestamp: new Date().toISOString(),
+    };
+
+    expect(() =>
+      filterAlertsBySeverity([invalidAlert], "low"),
+    ).toThrowError(/Invalid severity/i);
   });
 });
