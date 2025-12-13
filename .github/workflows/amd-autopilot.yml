@@ -1,18 +1,58 @@
-﻿name: AMD Autopilot
+name: AMD Autopilot
 
 on:
-  schedule:
-    # every 30 minutes; adjust if you like
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: amd-autopilot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_REF: main
+  BRANCH_PREFIX: cursor/autopilot-
 
 jobs:
-  autopilot:
+  guard:
+    name: guard / skip if open autopilot PR exists
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      open_pr: ${{ steps.check.outputs.open_pr }}
+    steps:
+      - name: Check open autopilot PRs
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH_PREFIX: ${{ env.BRANCH_PREFIX }}
+        run: |
+          set -euo pipefail
+          open_pr="$(gh api "repos/$REPO/pulls?state=open&per_page=100" --jq ".[] | select(.head.ref | startswith(\"$BRANCH_PREFIX\")) | .number" | head -n 1 || true)"
+          if [[ -n "$open_pr" ]]; then
+            echo "skip=true"   >> "$GITHUB_OUTPUT"
+            echo "open_pr=$open_pr" >> "$GITHUB_OUTPUT"
+            echo "Open autopilot PR #$open_pr exists; skipping autopilot launch."
+          else
+            echo "skip=false"  >> "$GITHUB_OUTPUT"
+            echo "open_pr="    >> "$GITHUB_OUTPUT"
+            echo "No open autopilot PR; proceeding."
+          fi
+
+  launch:
+    name: autopilot / launch
+    needs: guard
+    if: needs.guard.outputs.skip != 'true'
     uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.5
     with:
       base_ref: main
       branch_prefix: cursor/autopilot-
-      model: ""  # let kit/default choose model, or set explicitly
       install_cmd: pnpm install --frozen-lockfile
       test_cmd: pnpm test
     secrets:
