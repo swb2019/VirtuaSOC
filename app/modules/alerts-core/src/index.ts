@@ -1,4 +1,4 @@
-﻿export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "low" | "medium" | "high" | "critical";
 
 export interface SecurityAlert {
   id: string;
@@ -32,9 +32,10 @@ export function createAlert(input: {
   severity: Severity;
   timestamp?: string;
 }): SecurityAlert {
+  const trimmedTimestamp = input.timestamp?.trim();
   const timestamp =
-    input.timestamp && input.timestamp.trim().length > 0
-      ? input.timestamp
+    trimmedTimestamp && trimmedTimestamp.length > 0
+      ? trimmedTimestamp
       : new Date().toISOString();
 
   return {
