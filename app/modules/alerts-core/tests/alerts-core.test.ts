@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -11,6 +11,46 @@ const SEVERITY_ORDER: Severity[] = ["low", "medium", "high", "critical"];
 function indexOfSeverity(s: Severity): number {
   return SEVERITY_ORDER.indexOf(s);
 }
+
+const SAMPLE_ALERTS: SecurityAlert[] = [
+  createAlert({
+    source: "siem",
+    message: "Low signal",
+    severity: "low",
+    timestamp: "2025-01-01T00:00:00.000Z",
+  }),
+  createAlert({
+    source: "siem",
+    message: "Medium signal",
+    severity: "medium",
+    timestamp: "2025-01-02T00:00:00.000Z",
+  }),
+  createAlert({
+    source: "soc",
+    message: "High alert",
+    severity: "high",
+    timestamp: "2025-01-03T00:00:00.000Z",
+  }),
+  createAlert({
+    source: "eds",
+    message: "Critical alert",
+    severity: "critical",
+    timestamp: "2025-01-04T00:00:00.000Z",
+  }),
+];
+
+const SEVERITY_CASES: Array<{
+  minSeverity: Severity;
+  expectedSeverities: Severity[];
+}> = [
+  {
+    minSeverity: "low",
+    expectedSeverities: ["low", "medium", "high", "critical"],
+  },
+  { minSeverity: "medium", expectedSeverities: ["medium", "high", "critical"] },
+  { minSeverity: "high", expectedSeverities: ["high", "critical"] },
+  { minSeverity: "critical", expectedSeverities: ["critical"] },
+];
 
 describe("alerts-core", () => {
   it("creates an alert with generated timestamp when not provided", () => {
@@ -41,30 +81,20 @@ describe("alerts-core", () => {
     expect(alert.timestamp).toBe(ts);
   });
 
-  it("filters alerts by minimum severity", () => {
-    const alerts: SecurityAlert[] = [
-      createAlert({
-        source: "siem",
-        message: "Info",
-        severity: "low",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Warning",
-        severity: "medium",
-      }),
-      createAlert({
-        source: "siem",
-        message: "Critical issue",
-        severity: "critical",
-      }),
-    ];
+  it.each(SEVERITY_CASES)(
+    "filters alerts when minimum severity is %s",
+    ({ minSeverity, expectedSeverities }) => {
+      const filtered = filterAlertsBySeverity(SAMPLE_ALERTS, minSeverity);
 
-    const filtered = filterAlertsBySeverity(alerts, "high");
-    expect(
-      filtered.every(
-        (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
-      ),
-    ).toBe(true);
-  });
+      expect(filtered.map((alert) => alert.severity)).toEqual(
+        expectedSeverities,
+      );
+      expect(
+        filtered.every(
+          (alert) =>
+            indexOfSeverity(alert.severity) >= indexOfSeverity(minSeverity),
+        ),
+      ).toBe(true);
+    },
+  );
 });
