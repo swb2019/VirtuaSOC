@@ -1,4 +1,4 @@
-﻿# Module: alerts-core
+# Module: alerts-core
 
 ## Goal
 
@@ -21,9 +21,12 @@ Provide core in-memory alert types and basic querying utilities for VirtuaSOC.
 - [ ] `filterAlertsBySeverity(alerts, minSeverity)` returns only alerts whose
   severity is >= `minSeverity` in the order:
   `low < medium < high < critical`.
+- [ ] Invalid severity inputs (either for `minSeverity` or alert data)
+  throw descriptive errors so misconfigurations can be surfaced immediately.
 - [ ] Unit tests for:
   - Creating alerts with and without explicit timestamp.
   - Filtering alerts at each severity threshold.
+  - Rejecting invalid severity inputs.
 - [ ] `pnpm test` passes.
 
 ## Security & Compliance

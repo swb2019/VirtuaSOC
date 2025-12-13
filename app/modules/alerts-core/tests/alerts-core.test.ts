@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createAlert,
   filterAlertsBySeverity,
@@ -66,5 +66,19 @@ describe("alerts-core", () => {
         (a) => indexOfSeverity(a.severity) >= indexOfSeverity("high"),
       ),
     ).toBe(true);
+  });
+
+  it("throws when min severity is not recognized", () => {
+    const alerts: SecurityAlert[] = [
+      createAlert({
+        source: "siem",
+        message: "Critical issue",
+        severity: "critical",
+      }),
+    ];
+
+    expect(() =>
+      filterAlertsBySeverity(alerts, "urgent" as Severity),
+    ).toThrowError(/Unknown severity/);
   });
 });
