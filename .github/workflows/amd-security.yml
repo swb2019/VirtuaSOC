@@ -1,4 +1,4 @@
-# AMD-KIT wrapper (generated)
+﻿# AMD-KIT wrapper (generated)
 name: AMD Security
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   security:
-    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1.5
+    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1.5.2
     with:
       enable_codeql: true
       codeql_languages: "javascript-typescript"

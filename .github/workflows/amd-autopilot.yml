@@ -1,4 +1,4 @@
-name: AMD Autopilot
+﻿name: AMD Autopilot
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   autopilot:
-    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.5
+    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.5.2
     with:
       base_ref: main
       branch_prefix: cursor/autopilot-
