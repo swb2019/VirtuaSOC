@@ -1,4 +1,4 @@
-﻿name: AMD Autopilot
+name: AMD Autopilot
 
 on:
   schedule:
