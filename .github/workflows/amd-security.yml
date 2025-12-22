@@ -4,13 +4,14 @@ on:
   pull_request:
 
 permissions:
+  pull-requests: read
   actions: read
   contents: read
   security-events: write
 
 jobs:
   security:
-    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1.5.2
+    uses: swb2019/amd-kit/.github/workflows/amd-security.yml@v1.5.3
     with:
       enable_codeql: true
       codeql_languages: "javascript-typescript"
