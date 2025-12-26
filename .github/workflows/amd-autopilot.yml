@@ -8,7 +8,7 @@ on:
 
 jobs:
   autopilot:
-    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.5.3
+    uses: swb2019/amd-kit/.github/workflows/amd-autopilot.yml@v1.5.4
     with:
       base_ref: main
       branch_prefix: cursor/autopilot-
