@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    uses: swb2019/amd-kit/.github/workflows/amd-ci-node.yml@v1.5.3
+    uses: swb2019/amd-kit/.github/workflows/amd-ci-node.yml@v1.5.4
     with:
       node_version: "20"
       working_directory: "."
