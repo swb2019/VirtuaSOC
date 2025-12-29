@@ -1,0 +1,31 @@
+{
+  "name": "@virtuasoc/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run --passWithNoTests",
+    "db:migrate:control": "cross-env MIGRATION_MODE=control tsx src/migrations/runMigrations.ts",
+    "db:migrate:tenant": "cross-env MIGRATION_MODE=tenant tsx src/migrations/runMigrations.ts",
+    "db:migrate": "npm run db:migrate:control && npm run db:migrate:tenant",
+    "db:seed": "tsx src/migrations/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/jwt": "^9.0.1",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.2",
+    "@sinclair/typebox": "^0.34.14",
+    "@virtuasoc/core": "0.1.0",
+    "@virtuasoc/reporting": "0.1.0",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.40.5",
+    "fastify": "^5.2.0",
+    "jose": "^5.9.6",
+    "postgres": "^3.4.7"
+  }
+}

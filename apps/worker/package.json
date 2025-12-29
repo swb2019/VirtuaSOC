@@ -1,0 +1,22 @@
+{
+  "name": "@virtuasoc/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@virtuasoc/core": "0.1.0",
+    "@virtuasoc/reporting": "0.1.0",
+    "@virtuasoc/integration-email": "0.1.0",
+    "@virtuasoc/integration-teams": "0.1.0",
+    "@virtuasoc/integration-webhook": "0.1.0",
+    "bullmq": "^5.40.5",
+    "postgres": "^3.4.7",
+    "rss-parser": "^3.13.0"
+  }
+}

@@ -1,0 +1,75 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  api:
+    repository: ghcr.io/your-org/virtuasoc-api
+    tag: latest
+  worker:
+    repository: ghcr.io/your-org/virtuasoc-worker
+    tag: latest
+  web:
+    repository: ghcr.io/your-org/virtuasoc-web
+    tag: latest
+
+service:
+  apiPort: 3001
+  webPort: 8080
+
+ingress:
+  enabled: true
+  className: ""
+  tls: []
+  hosts:
+    - host: "example.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: web
+    - host: "*.example.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: web
+
+env:
+  nodeEnv: production
+  apiBasePath: /api
+  authMode: oidc
+  distributionRequireApproval: "true"
+  redactPiiOnDistribution: "true"
+  dataRetentionDays: "90"
+
+secrets:
+  # If using External Secrets, set create=false and set existingSecretName to the Secret that ESO writes.
+  create: true
+  existingSecretName: ""
+
+  # Required core SaaS
+  redisUrl: ""
+  controlDatabaseUrl: ""
+  postgresAdminUrl: ""
+  tenantDsnEncryptionKey: ""
+  platformAdminKey: ""
+
+  # Local auth only (dev/break-glass)
+  jwtSecret: ""
+
+  # Distribution (optional)
+  teamsWebhookUrl: ""
+  smtpHost: ""
+  smtpPort: "587"
+  smtpUser: ""
+  smtpPass: ""
+  smtpFrom: ""
+
+resources:
+  api: {}
+  worker: {}
+  web: {}

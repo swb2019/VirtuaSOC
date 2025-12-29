@@ -1,0 +1,6 @@
+apiVersion: v2
+name: virtuasoc
+description: VirtuaSOC SaaS (API + Worker + Web)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
