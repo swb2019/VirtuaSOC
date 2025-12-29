@@ -17,7 +17,18 @@ spec:
         {{- include "virtuasoc.labels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
+      serviceAccountName: {{ include "virtuasoc.serviceAccountName" . }}
       containers:
+        {{- if .Values.gcp.cloudSqlProxy.enabled }}
+        - name: cloud-sql-proxy
+          image: {{ .Values.gcp.cloudSqlProxy.image | quote }}
+          args:
+            {{- if .Values.gcp.cloudSqlProxy.privateIp }}
+            - "--private-ip"
+            {{- end }}
+            - "--port={{ .Values.gcp.cloudSqlProxy.port }}"
+            - {{ .Values.gcp.cloudSqlProxy.instanceConnectionName | quote }}
+        {{- end }}
         - name: api
           image: "{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
           imagePullPolicy: IfNotPresent

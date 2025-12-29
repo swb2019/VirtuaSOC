@@ -25,3 +25,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- printf "%s-secrets" (include "virtuasoc.fullname" .) -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "virtuasoc.serviceAccountName" -}}
+{{- if .Values.serviceAccount.name -}}
+{{- .Values.serviceAccount.name -}}
+{{- else -}}
+{{- printf "%s-sa" (include "virtuasoc.fullname" .) -}}
+{{- end -}}
+{{- end -}}

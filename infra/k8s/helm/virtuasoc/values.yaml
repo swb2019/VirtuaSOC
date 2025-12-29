@@ -73,3 +73,16 @@ resources:
   api: {}
   worker: {}
   web: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+gcp:
+  cloudSqlProxy:
+    enabled: false
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.4
+    instanceConnectionName: ""
+    port: 5432
+    privateIp: true
