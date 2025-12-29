@@ -10,6 +10,8 @@ import { getConfig, type ApiConfig } from "./config.js";
 import { adminTenantsRoutes } from "./routes/adminTenants.js";
 import { tenancyPlugin } from "./tenancy/plugin.js";
 import { tenantHealthRoutes } from "./routes/tenantHealth.js";
+import { oidcConfigRoutes } from "./routes/oidcConfig.js";
+import { authPlugin } from "./auth/plugin.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -45,6 +47,8 @@ export async function createApp() {
   await app.register(adminTenantsRoutes, { prefix: basePath });
   await app.register(async (tenantScoped) => {
     await tenantScoped.register(tenancyPlugin);
+    await tenantScoped.register(oidcConfigRoutes);
+    await tenantScoped.register(authPlugin);
     await tenantScoped.register(tenantHealthRoutes);
   }, { prefix: basePath });
 
