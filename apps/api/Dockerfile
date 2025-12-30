@@ -28,6 +28,8 @@ COPY --from=build /repo/package.json ./package.json
 
 COPY --from=build /repo/apps/api/package.json ./apps/api/package.json
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
+COPY --from=build /repo/apps/api/migrations-control ./apps/api/migrations-control
+COPY --from=build /repo/apps/api/migrations-tenant ./apps/api/migrations-tenant
 
 COPY --from=build /repo/packages/core/package.json ./packages/core/package.json
 COPY --from=build /repo/packages/core/dist ./packages/core/dist

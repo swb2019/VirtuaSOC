@@ -4,6 +4,7 @@ import sensible from "@fastify/sensible";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import jwt from "@fastify/jwt";
+import { resolve } from "node:path";
 
 import { createDb } from "./db.js";
 import { getConfig, type ApiConfig } from "./config.js";
@@ -15,6 +16,7 @@ import { authPlugin } from "./auth/plugin.js";
 import { reportDefinitionsRoutes } from "./routes/reportDefinitions.js";
 import { evidenceRoutes } from "./routes/evidence.js";
 import { reportsRoutes } from "./routes/reports.js";
+import { runSqlMigrations } from "./migrations/migrator.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -29,6 +31,12 @@ export async function createApp() {
 
   app.decorate("config", config);
   app.decorate("controlDb", createDb(config.controlDatabaseUrl));
+
+  // Economical + simple: auto-migrate control-plane on startup (safe for our default replicaCount=1).
+  if ((process.env.AUTO_MIGRATE_CONTROL ?? "true") !== "false") {
+    const dir = resolve(process.cwd(), "apps/api/migrations-control");
+    await runSqlMigrations(config.controlDatabaseUrl, dir);
+  }
 
   await app.register(cors, { origin: true });
   await app.register(sensible);

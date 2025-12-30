@@ -1,4 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import postgres from "postgres";
 
@@ -22,7 +23,7 @@ export async function runSqlMigrations(databaseUrl: string, migrationsDir: strin
     `;
     if (applied.length) continue;
 
-    const text = await readFile(`${migrationsDir}/${file}`, "utf8");
+    const text = await readFile(join(migrationsDir, file), "utf8");
     // eslint-disable-next-line no-console
     console.log(`Applying migration: ${file}`);
 
