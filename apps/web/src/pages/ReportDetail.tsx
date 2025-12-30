@@ -6,8 +6,8 @@ import { useAuth } from "../auth";
 
 export function ReportDetailPage() {
   const { id } = useParams();
-  const { token } = useAuth();
-  const api = useMemo(() => new ApiClient({ token: token ?? undefined }), [token]);
+  const { token, tenantSlug } = useAuth();
+  const api = useMemo(() => new ApiClient({ token: token ?? undefined, tenantSlug }), [token, tenantSlug]);
 
   const [report, setReport] = useState<any | null>(null);
   const [sections, setSections] = useState<any[]>([]);

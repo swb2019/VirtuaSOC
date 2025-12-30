@@ -64,14 +64,30 @@ async function scheduleTenantJobs(tenantId: string) {
 }
 
 async function main() {
-  const tenants = (await listTenants(controlDb)).filter((t) =>
-    config.tenantSlugs?.length ? config.tenantSlugs.includes(t.slug) : true,
-  );
-  if (!tenants.length) throw new Error("No tenants found in control-plane DB.");
+  const scheduled = new Set<string>();
 
-  for (const t of tenants) {
-    await scheduleTenantJobs(t.id);
+  async function refreshTenants() {
+    const tenants = (await listTenants(controlDb)).filter((t) =>
+      config.tenantSlugs?.length ? config.tenantSlugs.includes(t.slug) : true,
+    );
+    if (!tenants.length) {
+      // eslint-disable-next-line no-console
+      console.log("[worker] no tenants yet; waiting…");
+      return;
+    }
+    for (const t of tenants) {
+      if (scheduled.has(t.id)) continue;
+      await scheduleTenantJobs(t.id);
+      scheduled.add(t.id);
+      // eslint-disable-next-line no-console
+      console.log(`[worker] scheduled jobs for tenant ${t.slug} (${t.id})`);
+    }
   }
+
+  await refreshTenants();
+  setInterval(() => {
+    refreshTenants().catch((err) => console.error("[worker] refreshTenants error", err));
+  }, 5 * 60 * 1000);
 
   // Ingest worker
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

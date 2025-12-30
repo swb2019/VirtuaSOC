@@ -21,15 +21,8 @@ ingress:
   className: ""
   tls: []
   hosts:
-    - host: "example.com"
-      paths:
-        - path: /api
-          pathType: Prefix
-          service: api
-        - path: /
-          pathType: Prefix
-          service: web
-    - host: "*.example.com"
+    # Economical default: hostless ingress (works via LB IP), plus tenant selection via X-Tenant-Slug.
+    - host: ""
       paths:
         - path: /api
           pathType: Prefix

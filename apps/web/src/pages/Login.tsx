@@ -11,10 +11,13 @@ type OidcDiscovery = {
 };
 
 export function LoginPage() {
-  const { token } = useAuth();
+  const { token, tenantSlug, setTenantSlug } = useAuth();
   const nav = useNavigate();
 
-  const api = useMemo(() => new ApiClient({ token: token ?? undefined }), [token]);
+  const api = useMemo(
+    () => new ApiClient({ token: token ?? undefined, tenantSlug }),
+    [token, tenantSlug],
+  );
   const [status, setStatus] = useState<string>("Loading OIDC config…");
   const [err, setErr] = useState<string | null>(null);
 
@@ -62,6 +65,19 @@ export function LoginPage() {
       <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/40 p-8">
         <div className="text-lg font-semibold">VirtuaSOC</div>
         <div className="mt-1 text-sm text-slate-400">Analyst Workbench</div>
+
+        <div className="mt-6">
+          <label className="block text-xs font-semibold text-slate-400">Tenant slug</label>
+          <input
+            value={tenantSlug}
+            onChange={(e) => setTenantSlug(e.target.value)}
+            placeholder="demo"
+            className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+          />
+          <div className="mt-2 text-xs text-slate-500">
+            For quick public launch without wildcard DNS, VirtuaSOC uses this value via <code>X-Tenant-Slug</code>.
+          </div>
+        </div>
 
         <div className="mt-6 text-sm text-slate-300">{status}</div>
         {err ? <div className="mt-3 text-sm text-rose-300">{err}</div> : null}

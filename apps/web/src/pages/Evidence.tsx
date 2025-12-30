@@ -4,8 +4,8 @@ import { ApiClient } from "../api/client";
 import { useAuth } from "../auth";
 
 export function EvidencePage() {
-  const { token } = useAuth();
-  const api = useMemo(() => new ApiClient({ token: token ?? undefined }), [token]);
+  const { token, tenantSlug } = useAuth();
+  const api = useMemo(() => new ApiClient({ token: token ?? undefined, tenantSlug }), [token, tenantSlug]);
   const [q, setQ] = useState<string>("");
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);

@@ -37,10 +37,12 @@ export function OidcCallbackPage() {
         body: body.toString(),
       });
       if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
-      const tok = (await res.json()) as { access_token?: string };
-      if (!tok.access_token) throw new Error("Missing access_token");
+      const tok = (await res.json()) as { access_token?: string; id_token?: string };
+      const bearer = tok.id_token ?? tok.access_token;
+      if (!bearer) throw new Error("Missing id_token/access_token");
 
-      setToken(tok.access_token);
+      // Prefer id_token when present (works with Google OIDC where access_token may be opaque).
+      setToken(bearer);
       nav("/reports", { replace: true });
     }
 

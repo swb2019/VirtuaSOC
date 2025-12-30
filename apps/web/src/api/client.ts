@@ -1,17 +1,21 @@
 export type ApiClientOpts = {
   token?: string;
+  tenantSlug?: string;
 };
 
 export class ApiClient {
   private token?: string;
+  private tenantSlug?: string;
 
   constructor(opts: ApiClientOpts) {
     this.token = opts.token;
+    this.tenantSlug = opts.tenantSlug;
   }
 
   private headers() {
     const h: Record<string, string> = { "content-type": "application/json" };
     if (this.token) h.authorization = `Bearer ${this.token}`;
+    if (this.tenantSlug) h["x-tenant-slug"] = this.tenantSlug;
     return h;
   }
 

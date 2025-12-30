@@ -5,8 +5,8 @@ import { ApiClient } from "../api/client";
 import { useAuth } from "../auth";
 
 export function NewReportPage() {
-  const { token } = useAuth();
-  const api = useMemo(() => new ApiClient({ token: token ?? undefined }), [token]);
+  const { token, tenantSlug } = useAuth();
+  const api = useMemo(() => new ApiClient({ token: token ?? undefined, tenantSlug }), [token, tenantSlug]);
   const nav = useNavigate();
 
   const [defs, setDefs] = useState<{ id: string; title: string; description: string }[]>([]);
