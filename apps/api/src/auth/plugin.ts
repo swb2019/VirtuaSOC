@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
 
 import { getTenantAuthProvider } from "../tenancy/controlPlane.js";
 import { verifyOidcAccessToken, type OidcAuthUser } from "./oidc.js";
@@ -18,7 +19,7 @@ function isRole(value: unknown): value is LocalAuthUser["role"] {
   return value === "viewer" || value === "gsoc_analyst" || value === "gsoc_lead" || value === "admin";
 }
 
-export const authPlugin: FastifyPluginAsync = async (app) => {
+export const authPlugin: FastifyPluginAsync = fp(async (app) => {
   app.addHook("onRequest", async (req, reply) => {
     if (app.config.authMode === "local") {
       const authz = String(req.headers.authorization ?? "");
@@ -63,6 +64,6 @@ export const authPlugin: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: "Invalid token" });
     }
   });
-};
+});
 
 

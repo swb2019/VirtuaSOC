@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import fp from "fastify-plugin";
 
 import { createDb, type Db } from "../db.js";
 import { getTenantBySlug, getTenantDbDsn, type TenantRecord } from "./controlPlane.js";
@@ -17,14 +18,30 @@ function resolveTenantSlug(req: FastifyRequest): string | null {
   const host = String(req.headers.host ?? "").split(":")[0]?.toLowerCase();
   if (!host) return null;
 
-  // tenantSlug.example.com -> tenantSlug
-  const parts = host.split(".");
-  if (parts.length >= 3) return parts[0] ?? null;
+  const parts = host.split(".").filter(Boolean);
+
+  // Exclude raw IPv4 hostnames like 34.12.56.78
+  if (parts.length === 4 && parts.every((p) => /^\d+$/.test(p))) return null;
+
+  // Handle nip.io: 34.12.56.78.nip.io (no tenant) vs tenant.34.12.56.78.nip.io
+  const isNip = parts.slice(-2).join(".") === "nip.io";
+  if (isNip && parts.length === 6 && parts.slice(0, 4).every((p) => /^\d+$/.test(p))) return null;
+
+  // app.example.com is the base host (not a tenant); tenants are tenant.app.example.com
+  if (parts.length === 3 && parts[0] === "app") return null;
+
+  // tenantSlug.example.com -> tenantSlug (legacy) OR tenantSlug.app.example.com -> tenantSlug
+  if (parts.length >= 3) {
+    const candidate = parts[0] ?? null;
+    if (!candidate) return null;
+    if (candidate === "app" || candidate === "www") return null;
+    return candidate;
+  }
 
   return null;
 }
 
-export const tenancyPlugin: FastifyPluginAsync = async (app) => {
+export const tenancyPlugin: FastifyPluginAsync = fp(async (app) => {
   const cache = new Map<string, Db>();
 
   app.addHook("onRequest", async (req, reply) => {
@@ -48,6 +65,6 @@ export const tenancyPlugin: FastifyPluginAsync = async (app) => {
     req.tenant = tenant;
     req.tenantDb = tenantDb;
   });
-};
+});
 
 
