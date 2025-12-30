@@ -11,7 +11,7 @@ type OidcDiscovery = {
 };
 
 export function LoginPage() {
-  const { token, tenantSlug, setTenantSlug } = useAuth();
+  const { token, setToken, tenantSlug, setTenantSlug } = useAuth();
   const nav = useNavigate();
 
   const api = useMemo(
@@ -115,8 +115,7 @@ export function LoginPage() {
                 .then((t) => {
                   // Store token and proceed.
                   // (AuthProvider stores to localStorage)
-                  // eslint-disable-next-line no-restricted-globals
-                  window.localStorage.setItem("virtuasoc_access_token", t);
+                  setToken(t);
                   nav("/reports", { replace: true });
                 })
                 .catch((e) => setErr(String(e?.message ?? e)))
