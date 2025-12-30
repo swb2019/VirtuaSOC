@@ -44,6 +44,12 @@ export async function provisionTenantDb(postgresAdminUrl: string, tenantSlug: st
     await admin.unsafe(
       `CREATE ROLE ${quoteIdent(dbUser)} WITH LOGIN PASSWORD ${quoteLiteral(dbPassword)}`,
     );
+  } else {
+    // If the role already exists (e.g., a previous onboarding attempt failed after creating it),
+    // rotate/reset the password so the returned DSN actually works.
+    await admin.unsafe(
+      `ALTER ROLE ${quoteIdent(dbUser)} WITH PASSWORD ${quoteLiteral(dbPassword)}`,
+    );
   }
 
   // Create database if missing
