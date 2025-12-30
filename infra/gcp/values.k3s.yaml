@@ -1,0 +1,47 @@
+fullnameOverride: virtuasoc
+
+image:
+  api:
+    repository: ghcr.io/swb2019/virtuasoc-api
+    tag: latest
+  worker:
+    repository: ghcr.io/swb2019/virtuasoc-worker
+    tag: latest
+  web:
+    repository: ghcr.io/swb2019/virtuasoc-web
+    tag: latest
+
+# When using tag=latest, prefer Always. For pinned SHA tags, use IfNotPresent.
+imagePullPolicy: Always
+
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: "app.virtuasoc.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: web
+  tls:
+    - secretName: virtuasoc-tls
+      hosts:
+        - "app.virtuasoc.com"
+
+env:
+  # Budget-mode default until you configure an enterprise OIDC IdP.
+  authMode: local
+
+secrets:
+  # Create the Kubernetes secret out-of-band (or via Infisical/ESO), not in git.
+  create: false
+  existingSecretName: virtuasoc-secrets
+
+gcp:
+  cloudSqlProxy:
+    enabled: false
+
+

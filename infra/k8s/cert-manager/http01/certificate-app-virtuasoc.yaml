@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: virtuasoc-app
+  namespace: virtuasoc
+spec:
+  secretName: virtuasoc-tls
+  issuerRef:
+    name: letsencrypt-http01
+    kind: ClusterIssuer
+  dnsNames:
+    - app.virtuasoc.com
+
+
