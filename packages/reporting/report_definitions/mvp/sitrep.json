@@ -1,0 +1,18 @@
+{
+  "id": "sitrep",
+  "title": "Situation Report (SITREP)",
+  "description": "Daily/operational situation report summarizing key security-relevant developments for decision makers.",
+  "cadence": "daily",
+  "requiredSources": ["internal", "open_source"],
+  "requiredSections": [
+    { "id": "executive_summary", "title": "Executive Summary", "required": true, "maxChars": 2000 },
+    { "id": "key_developments", "title": "Key Developments", "required": true, "maxChars": 6000 },
+    { "id": "recommended_actions", "title": "Recommended Actions", "required": true, "maxChars": 3000 }
+  ],
+  "recommendedSections": [
+    { "id": "watchlist", "title": "Watchlist (Next 24–72h)", "required": false, "maxChars": 3000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+

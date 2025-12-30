@@ -1,0 +1,19 @@
+{
+  "id": "threat_assessment",
+  "title": "Threat Assessment",
+  "description": "Analytic assessment of a threat actor/issue with likelihood, impact, and confidence.",
+  "cadence": "ad_hoc",
+  "requiredSources": ["open_source", "internal"],
+  "requiredSections": [
+    { "id": "judgments", "title": "Key Judgments", "required": true, "maxChars": 3000 },
+    { "id": "background", "title": "Background", "required": true, "maxChars": 5000 },
+    { "id": "likelihood_impact", "title": "Likelihood & Impact", "required": true, "maxChars": 4000 },
+    { "id": "mitigation", "title": "Mitigation / Recommendations", "required": true, "maxChars": 4000 }
+  ],
+  "recommendedSections": [
+    { "id": "confidence", "title": "Confidence & Gaps", "required": false, "maxChars": 3000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+

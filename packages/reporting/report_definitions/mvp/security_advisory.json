@@ -1,0 +1,19 @@
+{
+  "id": "security_advisory",
+  "title": "Security Advisory",
+  "description": "Advisory for a specific threat/incident/campaign with recommended mitigations.",
+  "cadence": "ad_hoc",
+  "requiredSources": ["open_source", "vendor", "internal"],
+  "requiredSections": [
+    { "id": "summary", "title": "Summary", "required": true, "maxChars": 2000 },
+    { "id": "what_happened", "title": "What Happened", "required": true, "maxChars": 4000 },
+    { "id": "impact", "title": "Impact (People/Facilities/Operations)", "required": true, "maxChars": 3000 },
+    { "id": "recommended_actions", "title": "Recommended Actions", "required": true, "maxChars": 4000 }
+  ],
+  "recommendedSections": [
+    { "id": "indicators", "title": "Indicators / Observables", "required": false, "maxChars": 4000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+

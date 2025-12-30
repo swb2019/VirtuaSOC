@@ -1,0 +1,18 @@
+{
+  "id": "dib",
+  "title": "Daily Intelligence Brief (DIB)",
+  "description": "Daily brief for leadership with prioritized intelligence items and implications.",
+  "cadence": "daily",
+  "requiredSources": ["internal", "open_source"],
+  "requiredSections": [
+    { "id": "top_lines", "title": "Top Lines", "required": true, "maxChars": 2500 },
+    { "id": "notable_events", "title": "Notable Events", "required": true, "maxChars": 6000 },
+    { "id": "implications", "title": "Implications", "required": true, "maxChars": 4000 }
+  ],
+  "recommendedSections": [
+    { "id": "geography", "title": "Geographic Focus", "required": false, "maxChars": 3000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+

@@ -6,7 +6,7 @@ metadata:
     {{- include "virtuasoc.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount.worker }}
   selector:
     matchLabels:
       app.kubernetes.io/instance: {{ .Release.Name }}

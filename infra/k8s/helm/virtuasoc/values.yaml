@@ -74,6 +74,11 @@ resources:
   worker: {}
   web: {}
 
+replicaCount:
+  api: 1
+  worker: 1
+  web: 1
+
 serviceAccount:
   create: true
   name: ""

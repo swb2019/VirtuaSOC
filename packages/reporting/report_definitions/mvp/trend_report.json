@@ -1,0 +1,19 @@
+{
+  "id": "trend_report",
+  "title": "Trend Report",
+  "description": "Periodic report describing security-relevant trends, drivers, and outlook.",
+  "cadence": "weekly",
+  "requiredSources": ["internal", "open_source"],
+  "requiredSections": [
+    { "id": "summary", "title": "Summary", "required": true, "maxChars": 3000 },
+    { "id": "observed_trends", "title": "Observed Trends", "required": true, "maxChars": 6000 },
+    { "id": "drivers", "title": "Drivers / Contributing Factors", "required": true, "maxChars": 5000 },
+    { "id": "outlook", "title": "Outlook (Next 30–90 days)", "required": true, "maxChars": 4000 }
+  ],
+  "recommendedSections": [
+    { "id": "recommendations", "title": "Recommendations", "required": false, "maxChars": 4000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+

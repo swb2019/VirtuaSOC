@@ -8,6 +8,7 @@ import { ingestRssFeed, type IngestRssJobPayload } from "./ingest/rss.js";
 import { runRetentionCleanup, type RetentionCleanupJobPayload } from "./maintenance/retentionCleanup.js";
 import { JOBS, QUEUES } from "./queues.js";
 import { getTenantDbDsn, listTenants } from "./tenancy/controlPlane.js";
+import { runAutoSitrep, type AutoSitrepJobPayload } from "./reports/autoSitrep.js";
 
 const DEFAULT_RSS_FEEDS = [
   "https://www.cisa.gov/uscert/ncas/alerts.xml",
@@ -54,6 +55,12 @@ async function scheduleTenantJobs(tenantId: string) {
     repeat: { every: 24 * 60 * 60 * 1000 },
     jobId: `cleanup:${tenantId}`,
   });
+
+  const sitrepPayload: AutoSitrepJobPayload = { tenantId };
+  await ingestQueue.add(JOBS.autoSitrep, sitrepPayload, {
+    repeat: { every: 24 * 60 * 60 * 1000 },
+    jobId: `autos:sitrep:${tenantId}`,
+  });
 }
 
 async function main() {
@@ -81,6 +88,12 @@ async function main() {
         const payload = job.data as RetentionCleanupJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
         await runRetentionCleanup(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.autoSitrep) {
+        const payload = job.data as AutoSitrepJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await runAutoSitrep(tenantDb, payload);
         return;
       }
     },

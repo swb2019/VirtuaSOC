@@ -12,6 +12,9 @@ import { tenancyPlugin } from "./tenancy/plugin.js";
 import { tenantHealthRoutes } from "./routes/tenantHealth.js";
 import { oidcConfigRoutes } from "./routes/oidcConfig.js";
 import { authPlugin } from "./auth/plugin.js";
+import { reportDefinitionsRoutes } from "./routes/reportDefinitions.js";
+import { evidenceRoutes } from "./routes/evidence.js";
+import { reportsRoutes } from "./routes/reports.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -50,6 +53,9 @@ export async function createApp() {
     await tenantScoped.register(oidcConfigRoutes);
     await tenantScoped.register(authPlugin);
     await tenantScoped.register(tenantHealthRoutes);
+    await tenantScoped.register(reportDefinitionsRoutes);
+    await tenantScoped.register(evidenceRoutes);
+    await tenantScoped.register(reportsRoutes);
   }, { prefix: basePath });
 
   return app;

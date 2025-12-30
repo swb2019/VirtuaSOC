@@ -1,0 +1,19 @@
+{
+  "id": "incident_intsum",
+  "title": "Incident Intelligence Summary (INTSUM)",
+  "description": "Incident-focused intelligence summary supporting response decisions and stakeholder updates.",
+  "cadence": "incident",
+  "requiredSources": ["internal", "open_source"],
+  "requiredSections": [
+    { "id": "situation", "title": "Situation", "required": true, "maxChars": 4000 },
+    { "id": "timeline", "title": "Timeline", "required": true, "maxChars": 5000 },
+    { "id": "assessment", "title": "Assessment", "required": true, "maxChars": 5000 },
+    { "id": "next_steps", "title": "Next Steps", "required": true, "maxChars": 3000 }
+  ],
+  "recommendedSections": [
+    { "id": "stakeholders", "title": "Stakeholders / Coordination", "required": false, "maxChars": 3000 },
+    { "id": "sources", "title": "Sources", "required": false, "maxChars": 4000 }
+  ]
+}
+
+
