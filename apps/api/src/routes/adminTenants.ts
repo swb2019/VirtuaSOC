@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import type { FastifyPluginAsync } from "fastify";
 
@@ -83,7 +83,9 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
 
     // Provision tenant DB + run tenant migrations
     const provisioned = await provisionTenantDb(config.postgresAdminUrl, slug);
-    const tenantMigrationsDir = fileURLToPath(new URL("../../migrations-tenant/", import.meta.url));
+    // NOTE: tsup bundles to dist/index.js, so import.meta.url-relative paths point to /repo/apps/*.
+    // Use process.cwd()-relative path instead (stable in our Docker images where WORKDIR=/repo).
+    const tenantMigrationsDir = resolve(process.cwd(), "apps/api/migrations-tenant");
     await runSqlMigrations(provisioned.dsn, tenantMigrationsDir);
 
     const encryptedDsn = encryptString(config.tenantDsnEncryptionKey, provisioned.dsn);
