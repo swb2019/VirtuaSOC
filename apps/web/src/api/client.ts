@@ -119,4 +119,106 @@ export class ApiClient {
   }
 }
 
+export type AdminApiClientOpts = {
+  token?: string;
+};
+
+export class AdminApiClient {
+  private token?: string;
+
+  constructor(opts: AdminApiClientOpts) {
+    this.token = opts.token;
+  }
+
+  private headers() {
+    const h: Record<string, string> = { "content-type": "application/json" };
+    if (this.token) h.authorization = `Bearer ${this.token}`;
+    return h;
+  }
+
+  async platformOidcConfig() {
+    const res = await fetch("/api/admin/auth/oidc/config");
+    if (!res.ok) throw new Error(`platform oidc config failed: ${res.status}`);
+    return (await res.json()) as { issuer: string; clientId: string; scopes: string; roleClaimPath: string };
+  }
+
+  async listTenants() {
+    const res = await fetch("/api/admin/tenants", { headers: this.headers() });
+    if (!res.ok) throw new Error(`list tenants failed: ${res.status}`);
+    return (await res.json()) as { tenants: { id: string; slug: string; name: string; createdAt: string }[] };
+  }
+
+  async createTenant(body: {
+    slug: string;
+    name: string;
+    oidc?: {
+      issuer: string;
+      clientId: string;
+      scopes?: string;
+      roleClaimPath?: string;
+      roleMapping?: Record<string, string>;
+    };
+  }) {
+    const res = await fetch("/api/admin/tenants", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`create tenant failed: ${res.status}`);
+    return (await res.json()) as { tenant: { id: string; slug: string; name: string; dbName: string; dbUser: string } };
+  }
+
+  async getTenant(id: string) {
+    const res = await fetch(`/api/admin/tenants/${encodeURIComponent(id)}`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`get tenant failed: ${res.status}`);
+    return (await res.json()) as {
+      tenant: { id: string; slug: string; name: string; createdAt: string };
+      oidc:
+        | {
+            issuer: string;
+            clientId: string;
+            scopes: string;
+            roleClaimPath: string;
+            roleMapping: Record<string, string>;
+          }
+        | null;
+    };
+  }
+
+  async updateTenant(
+    id: string,
+    body: {
+      name?: string;
+      oidc?:
+        | {
+            issuer: string;
+            clientId: string;
+            scopes?: string;
+            roleClaimPath?: string;
+            roleMapping?: Record<string, string>;
+          }
+        | null;
+    },
+  ) {
+    const res = await fetch(`/api/admin/tenants/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`update tenant failed: ${res.status}`);
+    return (await res.json()) as {
+      tenant: { id: string; slug: string; name: string; createdAt: string };
+      oidc:
+        | {
+            issuer: string;
+            clientId: string;
+            scopes: string;
+            roleClaimPath: string;
+            roleMapping: Record<string, string>;
+          }
+        | null;
+    };
+  }
+}
+
 

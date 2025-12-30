@@ -105,13 +105,51 @@ Required keys:
 - `CONTROL_DATABASE_URL` (points at `virtuasoc_control`)
 - `POSTGRES_ADMIN_URL` (points at `postgres`)
 - `TENANT_DSN_ENCRYPTION_KEY` (32 bytes hex or base64)
-- `PLATFORM_ADMIN_KEY` (random string; used for `/api/admin/*`)
-- `JWT_SECRET` (for `AUTH_MODE=local`)
+- `PLATFORM_ADMIN_KEY` (random string; **break-glass** for `/api/admin/*` if platform OIDC is down)
+- `JWT_SECRET` (for `AUTH_MODE=local` only)
 
-### Optional: Infisical (recommended for secret hygiene)
-If you use **Infisical**, configure it to write a Kubernetes Secret named `virtuasoc-secrets` in the `virtuasoc` namespace.
+Recommended (platform operator OIDC for `/admin` and `/api/admin/*`):
+- `PLATFORM_OIDC_ISSUER`
+- `PLATFORM_OIDC_CLIENT_ID`
+- `PLATFORM_OIDC_SCOPES` (default: `openid profile email`)
+- `PLATFORM_OIDC_ROLE_CLAIM_PATH` (default: `roles`)
+- `PLATFORM_OIDC_ROLE_MAPPING` (JSON object; example: `{ \"PlatformAdmin\": \"admin\" }`)
 
-Then keep the chart set to:
+### Recommended: Infisical Cloud → Kubernetes Secret sync
+Use the Infisical Secrets Operator to continuously sync secrets into the `virtuasoc` namespace.
+
+Templates + details live under `infra/k8s/infisical/`.
+
+Install the operator:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+helm repo add infisical https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+helm repo update
+helm upgrade --install infisical-operator infisical/secrets-operator \
+  --namespace infisical-operator-system --create-namespace
+```
+
+Create the Universal Auth credentials Secret (edit placeholders first):
+
+```bash
+kubectl apply -f infra/k8s/infisical/infisical-auth-secret.yaml
+```
+
+Create the `InfisicalSecret` CR to manage `virtuasoc-secrets` (edit placeholders first):
+
+```bash
+kubectl apply -f infra/k8s/infisical/infisicalsecret-virtuasoc.yaml
+```
+
+Verify:
+
+```bash
+kubectl -n virtuasoc get secret virtuasoc-secrets -o wide
+```
+
+Keep the Helm chart set to:
 - `secrets.create=false`
 - `secrets.existingSecretName=virtuasoc-secrets`
 
@@ -139,7 +177,12 @@ kubectl -n virtuasoc get certificate virtuasoc-app -o wide
 ```
 
 ## 6) Create first tenant
-Use the platform admin key:
+Preferred: use the **Tenant Admin UI** (platform SSO):
+- Go to `https://app.virtuasoc.com/admin/login`
+- Sign in (Platform SSO)
+- Create tenant + configure tenant OIDC
+
+Break-glass alternative (platform admin key):
 
 ```bash
 curl -X POST https://app.virtuasoc.com/api/admin/tenants \
@@ -154,6 +197,17 @@ VirtuaSOC includes a **Local admin (break-glass)** login in the web UI when `AUT
 - Click **Local admin (break-glass)**
 - Paste the `PLATFORM_ADMIN_KEY`
 
-When you later configure enterprise OIDC, switch `env.authMode` back to `oidc`.
+When you configure enterprise OIDC:
+- configure platform operator OIDC (for `/admin`) and redeploy
+- configure tenant OIDC via the `/admin` UI
+- switch `env.authMode` to `oidc` and redeploy
+
+Entra reference setup:
+- `docs/deploy/oidc-entra-id.md`
+
+## Next: backups + hardening
+- Disk snapshots: `docs/deploy/backups-snapshots.md`
+- Nightly pg_dump to GCS: `docs/deploy/backups-pgdump.md`
+- Minimal ops hardening: `docs/deploy/ops-hardening.md`
 
 

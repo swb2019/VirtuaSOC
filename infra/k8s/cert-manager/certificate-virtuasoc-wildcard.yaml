@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: virtuasoc-wildcard
+  namespace: virtuasoc
+spec:
+  secretName: virtuasoc-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - app.virtuasoc.com
+    - "*.app.virtuasoc.com"
+
+

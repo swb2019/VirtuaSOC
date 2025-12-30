@@ -1,0 +1,113 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: virtuasoc-pgdump-to-gcs
+  namespace: virtuasoc
+spec:
+  # Runs daily at 02:15 UTC by default. Adjust to your preference.
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: CLOUDSDK_CORE_DISABLE_PROMPTS
+                  value: "1"
+                - name: POSTGRES_ADMIN_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: virtuasoc-secrets
+                      key: POSTGRES_ADMIN_URL
+                - name: GCS_BUCKET
+                  value: "<GCS_BUCKET_NAME>"
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: /var/secrets/google/key.json
+              volumeMounts:
+                - name: gcp-sa
+                  mountPath: /var/secrets/google
+                  readOnly: true
+              command: ["/bin/bash", "-lc"]
+              args:
+                - |
+                  set -euo pipefail
+
+                  echo "Installing postgresql-client..."
+                  apt-get update -y
+                  apt-get install -y --no-install-recommends postgresql-client ca-certificates
+                  rm -rf /var/lib/apt/lists/*
+
+                  TS="$(date -u +%Y%m%dT%H%M%SZ)"
+                  echo "Backup timestamp: ${TS}"
+
+                  # Export PG* env vars from POSTGRES_ADMIN_URL (supports postgres:// or postgresql://)
+                  eval "$(python3 - <<'PY'
+                  import os, urllib.parse
+                  dsn=os.environ.get("POSTGRES_ADMIN_URL","")
+                  if not dsn:
+                    raise SystemExit("POSTGRES_ADMIN_URL is empty")
+                  u=urllib.parse.urlparse(dsn)
+                  if u.scheme not in ("postgres","postgresql"):
+                    raise SystemExit(f"Unexpected DSN scheme: {u.scheme}")
+                  q=urllib.parse.parse_qs(u.query)
+                  def q1(name):
+                    return (q.get(name, [""]) or [""])[0]
+                  host=u.hostname or ""
+                  port=str(u.port or 5432)
+                  user=u.username or ""
+                  pw=u.password or ""
+                  print(f"export PGHOST='{host}'")
+                  print(f"export PGPORT='{port}'")
+                  print(f"export PGUSER='{user}'")
+                  print(f"export PGPASSWORD='{pw}'")
+                  sslmode=q1("sslmode")
+                  if sslmode:
+                    print(f"export PGSSLMODE='{sslmode}'")
+                  PY
+                  )"
+
+                  if [ -z "${PGHOST:-}" ] || [ -z "${PGUSER:-}" ]; then
+                    echo "ERROR: Could not parse POSTGRES_ADMIN_URL (missing host/user)."
+                    exit 1
+                  fi
+
+                  if [ -z "${GCS_BUCKET:-}" ] || [[ "${GCS_BUCKET}" == "<GCS_BUCKET_NAME>" ]]; then
+                    echo "ERROR: Set spec.jobTemplate.spec.template.spec.containers[0].env[GCS_BUCKET] to your bucket name."
+                    exit 1
+                  fi
+
+                  echo "Listing databases..."
+                  DBS="$(psql -d postgres -At -c \"SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true AND datname <> 'postgres' ORDER BY datname\")"
+                  if [ -z "${DBS}" ]; then
+                    echo "No databases found to back up."
+                    exit 0
+                  fi
+
+                  echo "${DBS}" | while read -r db; do
+                    [ -z "${db}" ] && continue
+                    echo "Dumping ${db}..."
+                    # Stream dump directly to GCS (no local storage)
+                    pg_dump -d "${db}" --no-owner --no-privileges | gzip -c | \
+                      gsutil cp - "gs://${GCS_BUCKET}/pgdump/${TS}/${db}.sql.gz"
+                  done
+
+                  echo "Backups complete."
+          volumes:
+            - name: gcp-sa
+              secret:
+                secretName: virtuasoc-backup-gcp-sa
+                items:
+                  # The K8s Secret should contain a key named GCP_SA_KEY_JSON.
+                  # This is easiest if your Infisical secret key is also named GCP_SA_KEY_JSON.
+                  - key: GCP_SA_KEY_JSON
+                    path: key.json
+
+

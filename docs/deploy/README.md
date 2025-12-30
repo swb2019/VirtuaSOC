@@ -13,3 +13,10 @@ docker build -f apps/web/Dockerfile -t virtuasoc-web:dev .
 
 ## Kubernetes (Helm)
 See `infra/k8s/helm/virtuasoc`.
+
+## Deployment runbooks
+- `docs/deploy/vm-k3s.md` (single-VM budget mode)
+- `docs/deploy/backups-snapshots.md` (GCE disk snapshot schedule)
+- `docs/deploy/backups-pgdump.md` (nightly Postgres logical backups to GCS)
+- `docs/deploy/ops-hardening.md` (minimal security + ops hardening)
+- `docs/deploy/oidc-entra-id.md` (Entra ID OIDC reference setup)

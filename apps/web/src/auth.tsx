@@ -3,6 +3,8 @@ import React, { createContext, useContext, useMemo, useState } from "react";
 type AuthState = {
   token: string | null;
   setToken: (token: string | null) => void;
+  adminToken: string | null;
+  setAdminToken: (token: string | null) => void;
   tenantSlug: string;
   setTenantSlug: (slug: string) => void;
 };
@@ -10,6 +12,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 const STORAGE_KEY = "virtuasoc_access_token";
+const ADMIN_TOKEN_KEY = "virtuasoc_admin_access_token";
 const TENANT_KEY = "virtuasoc_tenant_slug";
 
 function deriveTenantSlugFromHost(hostname: string): string | null {
@@ -28,12 +31,15 @@ function deriveTenantSlugFromHost(hostname: string): string | null {
 
   const candidate = parts[0] ?? null;
   if (!candidate) return null;
+  // Reserved subdomains (base app host is not a tenant).
+  if (candidate === "app" || candidate === "www") return null;
   if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(candidate)) return null;
   return candidate;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
+  const [adminToken, setAdminTokenState] = useState<string | null>(() => sessionStorage.getItem(ADMIN_TOKEN_KEY));
   const [tenantSlug, setTenantSlugState] = useState<string>(() => {
     return (
       localStorage.getItem(TENANT_KEY) ??
@@ -48,13 +54,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem(STORAGE_KEY);
   };
 
+  const setAdminToken = (t: string | null) => {
+    setAdminTokenState(t);
+    if (t) sessionStorage.setItem(ADMIN_TOKEN_KEY, t);
+    else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  };
+
   const setTenantSlug = (slug: string) => {
     const s = slug.trim().toLowerCase();
     setTenantSlugState(s);
     localStorage.setItem(TENANT_KEY, s);
   };
 
-  const value = useMemo(() => ({ token, setToken, tenantSlug, setTenantSlug }), [token, tenantSlug]);
+  const value = useMemo(
+    () => ({ token, setToken, adminToken, setAdminToken, tenantSlug, setTenantSlug }),
+    [token, adminToken, tenantSlug],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

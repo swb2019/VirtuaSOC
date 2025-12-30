@@ -1,0 +1,57 @@
+fullnameOverride: virtuasoc
+
+image:
+  api:
+    repository: ghcr.io/swb2019/virtuasoc-api
+    tag: latest
+  worker:
+    repository: ghcr.io/swb2019/virtuasoc-worker
+    tag: latest
+  web:
+    repository: ghcr.io/swb2019/virtuasoc-web
+    tag: latest
+
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: "app.virtuasoc.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: web
+    - host: "*.app.virtuasoc.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: web
+  # TLS is enabled once cert-manager has issued the wildcard certificate into this secret.
+  tls:
+    - secretName: virtuasoc-tls
+      hosts:
+        - "app.virtuasoc.com"
+        - "*.app.virtuasoc.com"
+
+secrets:
+  # We create the Kubernetes secret out-of-band (kubectl create secret ...) so secrets never live in git.
+  create: false
+  existingSecretName: virtuasoc-secrets
+
+serviceAccount:
+  create: true
+  annotations:
+    iam.gke.io/gcp-service-account: virtuasoc-gsa@virtuasoc.iam.gserviceaccount.com
+
+gcp:
+  cloudSqlProxy:
+    enabled: true
+    instanceConnectionName: virtuasoc:us-east1:virtuasoc-db
+    privateIp: true
+
+
