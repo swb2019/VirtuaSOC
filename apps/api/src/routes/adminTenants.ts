@@ -21,6 +21,11 @@ type CreateTenantBody = {
   };
 };
 
+type AdminTokenBody = {
+  sub?: string;
+  role?: "viewer" | "gsoc_analyst" | "gsoc_lead" | "admin";
+};
+
 export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
   const { config, controlDb } = app;
 
@@ -36,6 +41,27 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/admin/tenants", async () => {
     return { tenants: await listTenants(controlDb) };
+  });
+
+  // Break-glass token issuance for AUTH_MODE=local.
+  // Protected by X-Platform-Admin-Key.
+  app.post<{ Body: AdminTokenBody }>("/admin/token", async (req, reply) => {
+    if (config.authMode !== "local") {
+      return reply.code(501).send({ error: "AUTH_MODE is not local" });
+    }
+
+    // fastify-jwt is registered only in AUTH_MODE=local.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const signer = (app as any).jwt;
+    if (!signer?.sign) return reply.code(500).send({ error: "JWT signing not available" });
+
+    const sub = String(req.body?.sub ?? "platform-admin").trim() || "platform-admin";
+    const role = (req.body?.role ?? "admin") as AdminTokenBody["role"];
+    const allowed = role === "viewer" || role === "gsoc_analyst" || role === "gsoc_lead" || role === "admin";
+    if (!allowed) return reply.code(400).send({ error: "Invalid role" });
+
+    const token = signer.sign({ sub, role });
+    return { token };
   });
 
   app.post<{ Body: CreateTenantBody }>("/admin/tenants", async (req, reply) => {
