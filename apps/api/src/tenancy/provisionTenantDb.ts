@@ -21,6 +21,12 @@ function makeDbUser(slug: string) {
   return assertSqlIdentifier(base.slice(0, 63));
 }
 
+function quoteLiteral(value: string): string {
+  // Minimal SQL literal quoting for generated secrets.
+  // (We still keep identifiers separately validated/quoted via quoteIdent.)
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export async function provisionTenantDb(postgresAdminUrl: string, tenantSlug: string): Promise<ProvisionedTenantDb> {
   const slug = assertTenantSlug(tenantSlug);
 
@@ -35,7 +41,9 @@ export async function provisionTenantDb(postgresAdminUrl: string, tenantSlug: st
     SELECT 1 as ok FROM pg_roles WHERE rolname = ${dbUser}
   `;
   if (!roleExists.length) {
-    await admin.unsafe(`CREATE ROLE ${quoteIdent(dbUser)} WITH LOGIN PASSWORD $1`, [dbPassword]);
+    await admin.unsafe(
+      `CREATE ROLE ${quoteIdent(dbUser)} WITH LOGIN PASSWORD ${quoteLiteral(dbPassword)}`,
+    );
   }
 
   // Create database if missing
