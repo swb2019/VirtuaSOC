@@ -12,6 +12,14 @@ image:
     repository: ghcr.io/your-org/virtuasoc-web
     tag: latest
 
+# Image pull policy for all containers (api/worker/web)
+imagePullPolicy: IfNotPresent
+
+# Optional: if your GHCR images are private, create an image pull secret and reference it here:
+# imagePullSecrets:
+#   - name: ghcr-pull
+imagePullSecrets: []
+
 service:
   apiPort: 3001
   webPort: 8080
@@ -80,7 +88,7 @@ serviceAccount:
 gcp:
   cloudSqlProxy:
     enabled: false
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.4
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.20.0
     instanceConnectionName: ""
     port: 5432
     privateIp: true

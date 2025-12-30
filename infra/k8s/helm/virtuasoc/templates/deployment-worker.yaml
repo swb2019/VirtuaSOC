@@ -18,6 +18,10 @@ spec:
         app.kubernetes.io/component: worker
     spec:
       serviceAccountName: {{ include "virtuasoc.serviceAccountName" . }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       containers:
         {{- if .Values.gcp.cloudSqlProxy.enabled }}
         - name: cloud-sql-proxy
@@ -31,7 +35,7 @@ spec:
         {{- end }}
         - name: worker
           image: "{{ .Values.image.worker.repository }}:{{ .Values.image.worker.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
           envFrom:
             - configMapRef:
                 name: {{ include "virtuasoc.fullname" . }}-config

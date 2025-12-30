@@ -18,6 +18,10 @@ spec:
         app.kubernetes.io/component: api
     spec:
       serviceAccountName: {{ include "virtuasoc.serviceAccountName" . }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       containers:
         {{- if .Values.gcp.cloudSqlProxy.enabled }}
         - name: cloud-sql-proxy
@@ -31,7 +35,7 @@ spec:
         {{- end }}
         - name: api
           image: "{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
               containerPort: {{ .Values.service.apiPort }}
