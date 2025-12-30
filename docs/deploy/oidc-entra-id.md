@@ -12,6 +12,20 @@ Entra **App Roles** are the easiest way to get a stable `roles` claim without gr
 
 VirtuaSOC can also map `groups`, but App Roles are strongly recommended.
 
+## 0) Create a free Entra tenant (if you don’t have one yet)
+
+If you don’t already have Microsoft 365 / Entra in your org, you can create a **free** Entra tenant for development/testing:
+
+1) Go to the Microsoft Entra admin center:
+- `https://entra.microsoft.com/`
+2) Create a new tenant:
+- **Microsoft Entra ID** → **Manage tenants** → **Create**
+3) Note your:
+- **Tenant ID** (GUID)
+- **Primary domain** (e.g. `yourorg.onmicrosoft.com`)
+
+You’ll use the **Tenant ID** in the issuer URLs below.
+
 ## 1) Platform operator (admin UI) app registration
 
 Create an Entra **App registration** (example name: `VirtuaSOC Platform Admin`).
@@ -20,6 +34,9 @@ Create an Entra **App registration** (example name: `VirtuaSOC Platform Admin`).
 - Add a **Single-page application (SPA)** platform
 - Add redirect URI:
   - `https://app.virtuasoc.com/admin/oidc/callback`
+
+Recommended:
+- Supported account types: **Accounts in this organizational directory only** (single-tenant)
 
 ### App roles
 Create an App Role for platform admins, for example:
@@ -50,6 +67,9 @@ For each tenant that uses Entra, create an App registration (example name: `Virt
 - Add redirect URI:
   - `https://app.virtuasoc.com/oidc/callback`
 
+Recommended:
+- Supported account types: **Accounts in this organizational directory only** (single-tenant)
+
 ### App roles
 Create app roles like:
 - `Analyst` → value `Analyst`
@@ -57,6 +77,12 @@ Create app roles like:
 - `Admin` → value `Admin`
 
 Assign roles to tenant users.
+
+### Token / claim notes (important)
+
+- VirtuaSOC uses the `roles` claim (from **App Roles**) by default.
+- Make sure the user is assigned one (or more) of the app roles you created.
+- In Entra, role values are strings; VirtuaSOC maps those values to its internal roles.
 
 ### Configure the tenant in VirtuaSOC (via Admin UI)
 

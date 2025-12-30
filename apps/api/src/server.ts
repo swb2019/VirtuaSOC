@@ -1,14 +1,18 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import underPressure from "@fastify/under-pressure";
 import jwt from "@fastify/jwt";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
 import { createDb } from "./db.js";
 import { getConfig, type ApiConfig } from "./config.js";
 import { adminTenantsRoutes } from "./routes/adminTenants.js";
+import { adminAuditRoutes } from "./routes/adminAudit.js";
 import { tenancyPlugin } from "./tenancy/plugin.js";
 import { tenantHealthRoutes } from "./routes/tenantHealth.js";
 import { oidcConfigRoutes } from "./routes/oidcConfig.js";
@@ -27,7 +31,14 @@ declare module "fastify" {
 
 export async function createApp() {
   const config = getConfig();
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    genReqId: (req) => {
+      const provided = req.headers["x-request-id"];
+      if (typeof provided === "string" && provided.trim()) return provided.trim();
+      return randomUUID();
+    },
+  });
 
   app.decorate("config", config);
   app.decorate("controlDb", createDb(config.controlDatabaseUrl));
@@ -40,6 +51,19 @@ export async function createApp() {
 
   await app.register(cors, { origin: true });
   await app.register(sensible);
+
+  // Budget-safe reliability protections
+  await app.register(underPressure, {
+    // If the event loop is consistently blocked, return 503s instead of piling on.
+    maxEventLoopDelay: 1000,
+    message: "Server is under pressure",
+  });
+
+  // Lightweight rate limiting (in-memory; fine for our single-replica budget mode).
+  await app.register(rateLimit, {
+    max: 300,
+    timeWindow: "1 minute",
+  });
 
   if (config.authMode === "local") {
     await app.register(jwt, { secret: config.jwtSecret! });
@@ -56,6 +80,7 @@ export async function createApp() {
 
   app.get(`${basePath}/health`, async () => ({ ok: true }));
   await app.register(adminTenantsRoutes, { prefix: basePath });
+  await app.register(adminAuditRoutes, { prefix: basePath });
   await app.register(async (tenantScoped) => {
     await tenantScoped.register(tenancyPlugin);
     await tenantScoped.register(oidcConfigRoutes);

@@ -22,6 +22,8 @@ export function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [platformAdminKey, setPlatformAdminKey] = useState<string>("");
   const [localSub, setLocalSub] = useState<string>("platform-admin");
+  const showBreakGlass =
+    !import.meta.env.PROD || new URLSearchParams(window.location.search).get("breakGlass") === "1";
 
   useEffect(() => {
     if (token) nav("/reports");
@@ -109,21 +111,23 @@ export function LoginPage() {
           >
             Sign in with SSO
           </button>
-          <button
-            onClick={() =>
-              localLogin()
-                .then((t) => {
-                  // Store token and proceed.
-                  // (AuthProvider stores to localStorage)
-                  setToken(t);
-                  nav("/reports", { replace: true });
-                })
-                .catch((e) => setErr(String(e?.message ?? e)))
-            }
-            className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-slate-700"
-          >
-            Local admin (break-glass)
-          </button>
+          {showBreakGlass ? (
+            <button
+              onClick={() =>
+                localLogin()
+                  .then((t) => {
+                    // Store token and proceed.
+                    // (AuthProvider stores to localStorage)
+                    setToken(t);
+                    nav("/reports", { replace: true });
+                  })
+                  .catch((e) => setErr(String(e?.message ?? e)))
+              }
+              className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-slate-700"
+            >
+              Local admin (break-glass)
+            </button>
+          ) : null}
           <button
             onClick={() => nav("/")}
             className="rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-slate-700"
@@ -132,28 +136,30 @@ export function LoginPage() {
           </button>
         </div>
 
-        <div className="mt-8 border-t border-slate-800 pt-6">
-          <div className="text-sm font-semibold text-slate-200">Local admin (break-glass)</div>
-          <div className="mt-2 text-xs text-slate-500">
-            Use this only when enterprise SSO isn’t configured yet. Requires <code>X-Platform-Admin-Key</code>.
+        {showBreakGlass ? (
+          <div className="mt-8 border-t border-slate-800 pt-6">
+            <div className="text-sm font-semibold text-slate-200">Local admin (break-glass)</div>
+            <div className="mt-2 text-xs text-slate-500">
+              Use this only when enterprise SSO isn’t configured yet. Requires <code>X-Platform-Admin-Key</code>.
+            </div>
+
+            <label className="mt-4 block text-xs font-semibold text-slate-400">Platform admin key</label>
+            <input
+              value={platformAdminKey}
+              onChange={(e) => setPlatformAdminKey(e.target.value)}
+              placeholder="(provided during deploy)"
+              className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+            />
+
+            <label className="mt-4 block text-xs font-semibold text-slate-400">Subject (sub)</label>
+            <input
+              value={localSub}
+              onChange={(e) => setLocalSub(e.target.value)}
+              placeholder="platform-admin"
+              className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+            />
           </div>
-
-          <label className="mt-4 block text-xs font-semibold text-slate-400">Platform admin key</label>
-          <input
-            value={platformAdminKey}
-            onChange={(e) => setPlatformAdminKey(e.target.value)}
-            placeholder="(provided during deploy)"
-            className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
-          />
-
-          <label className="mt-4 block text-xs font-semibold text-slate-400">Subject (sub)</label>
-          <input
-            value={localSub}
-            onChange={(e) => setLocalSub(e.target.value)}
-            placeholder="platform-admin"
-            className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
-          />
-        </div>
+        ) : null}
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ type TenantAuthProvider = {
   issuer: string;
   clientId: string;
   roleClaimPath: string;
+  audience?: string;
+  enforceAudience?: boolean;
   roleMapping: Record<string, string>;
 };
 
@@ -87,7 +89,8 @@ export async function verifyOidcAccessToken(token: string, provider: TenantAuthP
   const jwks = await jwksForIssuer(provider.issuer);
   const { payload } = await jwtVerify(token, jwks, {
     issuer: provider.issuer,
-    // Many enterprise setups do not set aud=clientId on access tokens. We validate iss+sig and rely on per-tenant issuer isolation.
+    // Optional (recommended for Entra id_tokens): validate aud when configured per tenant.
+    audience: provider.enforceAudience ? provider.audience : undefined,
   });
 
   const sub = String(payload.sub ?? "");

@@ -15,6 +15,8 @@ export type TenantAuthProvider = {
   clientId: string;
   scopes: string;
   roleClaimPath: string;
+  audience?: string;
+  enforceAudience: boolean;
   roleMapping: Record<string, string>;
 };
 
@@ -45,10 +47,12 @@ export async function getTenantAuthProvider(
       client_id: string;
       scopes: string;
       role_claim_path: string;
+      audience: string | null;
+      enforce_audience: boolean;
       role_mapping: Record<string, string>;
     }[]
   >`
-    SELECT tenant_id, issuer, client_id, scopes, role_claim_path, role_mapping
+    SELECT tenant_id, issuer, client_id, scopes, role_claim_path, audience, enforce_audience, role_mapping
     FROM tenant_auth_providers
     WHERE tenant_id = ${tenantId}
   `;
@@ -60,6 +64,8 @@ export async function getTenantAuthProvider(
     clientId: r.client_id,
     scopes: r.scopes,
     roleClaimPath: r.role_claim_path,
+    audience: r.audience ?? undefined,
+    enforceAudience: Boolean(r.enforce_audience),
     roleMapping: r.role_mapping ?? {},
   };
 }

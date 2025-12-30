@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-r
 import { useAuth } from "./auth";
 import { AdminLoginPage } from "./pages/admin/AdminLogin";
 import { AdminOidcCallbackPage } from "./pages/admin/AdminOidcCallback";
+import { AdminAuditPage } from "./pages/admin/AdminAudit";
 import { AdminTenantDetailPage } from "./pages/admin/AdminTenantDetail";
 import { AdminTenantsPage } from "./pages/admin/AdminTenants";
 import { EvidencePage } from "./pages/Evidence";
@@ -69,6 +70,7 @@ export function App() {
                     <Route path="/admin" element={<Navigate to="/admin/tenants" replace />} />
                     <Route path="/admin/tenants" element={<AdminTenantsPage />} />
                     <Route path="/admin/tenants/:id" element={<AdminTenantDetailPage />} />
+                    <Route path="/admin/audit" element={<AdminAuditPage />} />
                     <Route path="*" element={<Navigate to="/admin/tenants" replace />} />
                   </Routes>
                 </div>

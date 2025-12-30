@@ -142,6 +142,20 @@ export class AdminApiClient {
     return (await res.json()) as { issuer: string; clientId: string; scopes: string; roleClaimPath: string };
   }
 
+  async listAudit(limit = 100, offset = 0) {
+    const url = new URL("/api/admin/audit", window.location.origin);
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("offset", String(offset));
+    const res = await fetch(url.toString().replace(window.location.origin, ""), { headers: this.headers() });
+    if (!res.ok) throw new Error(`audit failed: ${res.status}`);
+    return (await res.json()) as {
+      events: any[];
+      limit: number;
+      offset: number;
+      nextOffset: number;
+    };
+  }
+
   async listTenants() {
     const res = await fetch("/api/admin/tenants", { headers: this.headers() });
     if (!res.ok) throw new Error(`list tenants failed: ${res.status}`);
@@ -179,6 +193,8 @@ export class AdminApiClient {
             clientId: string;
             scopes: string;
             roleClaimPath: string;
+            audience: string | null;
+            enforceAudience: boolean;
             roleMapping: Record<string, string>;
           }
         | null;
@@ -195,6 +211,8 @@ export class AdminApiClient {
             clientId: string;
             scopes?: string;
             roleClaimPath?: string;
+            audience?: string;
+            enforceAudience?: boolean;
             roleMapping?: Record<string, string>;
           }
         | null;
@@ -214,6 +232,8 @@ export class AdminApiClient {
             clientId: string;
             scopes: string;
             roleClaimPath: string;
+            audience: string | null;
+            enforceAudience: boolean;
             roleMapping: Record<string, string>;
           }
         | null;

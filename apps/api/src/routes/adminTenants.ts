@@ -5,6 +5,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { verifyPlatformOidcToken, type PlatformAuthUser } from "../auth/platformOidc.js";
 import { runSqlMigrations } from "../migrations/migrator.js";
+import { writePlatformAudit } from "../platformAudit.js";
 import { encryptString } from "../tenancy/crypto.js";
 import { provisionTenantDb } from "../tenancy/provisionTenantDb.js";
 import { assertTenantSlug } from "../util/ident.js";
@@ -18,6 +19,8 @@ type CreateTenantBody = {
     clientId: string;
     scopes?: string;
     roleClaimPath?: string;
+    audience?: string;
+    enforceAudience?: boolean;
     roleMapping?: Record<string, string>;
   };
 };
@@ -30,6 +33,8 @@ type UpdateTenantBody = {
         clientId: string;
         scopes?: string;
         roleClaimPath?: string;
+        audience?: string;
+        enforceAudience?: boolean;
         roleMapping?: Record<string, string>;
       }
     | null;
@@ -128,6 +133,8 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
             clientId: provider.clientId,
             scopes: provider.scopes,
             roleClaimPath: provider.roleClaimPath,
+            audience: provider.audience ?? null,
+            enforceAudience: provider.enforceAudience,
             roleMapping: provider.roleMapping ?? {},
           }
         : null,
@@ -194,12 +201,14 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
 
       if (req.body.oidc?.issuer && req.body.oidc?.clientId) {
         const scopes = req.body.oidc.scopes ?? "openid profile email";
-        const roleClaimPath = req.body.oidc.roleClaimPath ?? "groups";
+        const roleClaimPath = req.body.oidc.roleClaimPath ?? "roles";
+        const enforceAudience = Boolean(req.body.oidc.enforceAudience ?? true);
+        const audience = (req.body.oidc.audience ?? req.body.oidc.clientId) || null;
         const roleMapping = req.body.oidc.roleMapping ?? {};
 
         await tx`
           INSERT INTO tenant_auth_providers (
-            id, tenant_id, issuer, client_id, scopes, role_claim_path, role_mapping
+            id, tenant_id, issuer, client_id, scopes, role_claim_path, audience, enforce_audience, role_mapping
           ) VALUES (
             ${randomUUID()},
             ${tenantId},
@@ -207,11 +216,22 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
             ${req.body.oidc.clientId},
             ${scopes},
             ${roleClaimPath},
+            ${audience},
+            ${enforceAudience},
             ${tx.json(roleMapping)}
           )
         `;
       }
     });
+
+    await writePlatformAudit(
+      controlDb,
+      req.platformUser ? { sub: req.platformUser.sub, email: req.platformUser.email } : null,
+      "tenant.created",
+      "tenant",
+      tenantId,
+      { slug, name },
+    );
 
     return reply.code(201).send({
       tenant: {
@@ -241,6 +261,9 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
     const oidcScopes = oidc && typeof oidc === "object" ? String((oidc as any).scopes ?? "").trim() : undefined;
     const oidcRoleClaimPath =
       oidc && typeof oidc === "object" ? String((oidc as any).roleClaimPath ?? "").trim() : undefined;
+    const oidcAudience = oidc && typeof oidc === "object" ? String((oidc as any).audience ?? "").trim() : undefined;
+    const oidcEnforceAudience =
+      oidc && typeof oidc === "object" ? Boolean((oidc as any).enforceAudience ?? true) : undefined;
     const oidcRoleMappingRaw = oidc && typeof oidc === "object" ? (oidc as any).roleMapping : undefined;
 
     if (oidc !== undefined && oidc !== null) {
@@ -266,7 +289,9 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
       const issuer = oidcIssuer!;
       const clientId = oidcClientId!;
       const scopes = oidcScopes || "openid profile email";
-      const roleClaimPath = oidcRoleClaimPath || "groups";
+      const roleClaimPath = oidcRoleClaimPath || "roles";
+      const enforceAudience = oidcEnforceAudience ?? true;
+      const audience = (oidcAudience || clientId) || null;
       const roleMapping = (oidcRoleMappingRaw as Record<string, string> | undefined) ?? {};
 
       const existing = await tx<{ id: string }[]>`
@@ -275,9 +300,17 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
       if (!existing.length) {
         await tx`
           INSERT INTO tenant_auth_providers (
-            id, tenant_id, issuer, client_id, scopes, role_claim_path, role_mapping
+            id, tenant_id, issuer, client_id, scopes, role_claim_path, audience, enforce_audience, role_mapping
           ) VALUES (
-            ${randomUUID()}, ${tenantId}, ${issuer}, ${clientId}, ${scopes}, ${roleClaimPath}, ${tx.json(roleMapping)}
+            ${randomUUID()},
+            ${tenantId},
+            ${issuer},
+            ${clientId},
+            ${scopes},
+            ${roleClaimPath},
+            ${audience},
+            ${enforceAudience},
+            ${tx.json(roleMapping)}
           )
         `;
       } else {
@@ -287,6 +320,8 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
               client_id = ${clientId},
               scopes = ${scopes},
               role_claim_path = ${roleClaimPath},
+              audience = ${audience},
+              enforce_audience = ${enforceAudience},
               role_mapping = ${tx.json(roleMapping)}
           WHERE tenant_id = ${tenantId}
         `;
@@ -301,6 +336,19 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
     const t = rows[0]!;
     const provider = await getTenantAuthProvider(controlDb, tenantId);
 
+    await writePlatformAudit(
+      controlDb,
+      req.platformUser ? { sub: req.platformUser.sub, email: req.platformUser.email } : null,
+      oidc === null ? "tenant.oidc.removed" : "tenant.updated",
+      "tenant",
+      tenantId,
+      {
+        nameChanged: name !== undefined,
+        oidcChanged: oidc !== undefined,
+        oidcEnabled: oidc === undefined ? null : oidc !== null,
+      },
+    );
+
     return {
       tenant: { id: t.id, slug: t.slug, name: t.name, createdAt: t.created_at },
       oidc: provider
@@ -309,6 +357,8 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
             clientId: provider.clientId,
             scopes: provider.scopes,
             roleClaimPath: provider.roleClaimPath,
+            audience: provider.audience ?? null,
+            enforceAudience: provider.enforceAudience,
             roleMapping: provider.roleMapping ?? {},
           }
         : null,

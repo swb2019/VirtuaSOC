@@ -21,6 +21,8 @@ export function AdminTenantDetailPage() {
   const [clientId, setClientId] = useState<string>("");
   const [scopes, setScopes] = useState<string>("openid profile email");
   const [roleClaimPath, setRoleClaimPath] = useState<string>("groups");
+  const [enforceAudience, setEnforceAudience] = useState<boolean>(true);
+  const [audience, setAudience] = useState<string>("");
   const [roleMappingText, setRoleMappingText] = useState<string>("{}");
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -41,14 +43,18 @@ export function AdminTenantDetailPage() {
           setIssuer(res.oidc.issuer);
           setClientId(res.oidc.clientId);
           setScopes(res.oidc.scopes);
-          setRoleClaimPath(res.oidc.roleClaimPath);
+          setRoleClaimPath(res.oidc.roleClaimPath || "roles");
+          setEnforceAudience(Boolean(res.oidc.enforceAudience));
+          setAudience(res.oidc.audience ?? res.oidc.clientId);
           setRoleMappingText(JSON.stringify(res.oidc.roleMapping ?? {}, null, 2));
         } else {
           setOidcEnabled(false);
           setIssuer("");
           setClientId("");
           setScopes("openid profile email");
-          setRoleClaimPath("groups");
+          setRoleClaimPath("roles");
+          setEnforceAudience(true);
+          setAudience("");
           setRoleMappingText("{}");
         }
       } catch (e) {
@@ -90,7 +96,7 @@ export function AdminTenantDetailPage() {
       if (!nextClientId) throw new Error("clientId is required");
 
       const nextScopes = scopes.trim() || "openid profile email";
-      const nextRoleClaimPath = roleClaimPath.trim() || "groups";
+      const nextRoleClaimPath = roleClaimPath.trim() || "roles";
       const nextRoleMapping = parseRoleMapping();
 
       await api.updateTenant(tenantId, {
@@ -100,6 +106,8 @@ export function AdminTenantDetailPage() {
           clientId: nextClientId,
           scopes: nextScopes,
           roleClaimPath: nextRoleClaimPath,
+          enforceAudience,
+          audience: (audience.trim() || nextClientId) as string,
           roleMapping: nextRoleMapping,
         },
       });
@@ -200,7 +208,7 @@ export function AdminTenantDetailPage() {
                     <input
                       value={roleClaimPath}
                       onChange={(e) => setRoleClaimPath(e.target.value)}
-                      placeholder="groups"
+                      placeholder="roles"
                       className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
                     />
                     <div className="mt-2 text-xs text-slate-500">
@@ -219,6 +227,31 @@ export function AdminTenantDetailPage() {
                     <div className="mt-2 text-xs text-slate-500">
                       Map IdP values → VirtuaSOC roles (viewer, gsoc_analyst, gsoc_lead, admin).
                     </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400">Audience (aud)</label>
+                    <input
+                      value={audience}
+                      onChange={(e) => setAudience(e.target.value)}
+                      placeholder={clientId || "(clientId)"}
+                      className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+                    />
+                    <div className="mt-2 text-xs text-slate-500">
+                      For Entra <code>id_token</code>, this is typically the client ID.
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={enforceAudience}
+                        onChange={(e) => setEnforceAudience(e.target.checked)}
+                      />
+                      Enforce audience validation
+                    </label>
                   </div>
                 </div>
               </div>
