@@ -69,6 +69,11 @@ export const adminTenantsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.addHook("onRequest", async (req, reply) => {
+    // Public endpoint used by the Admin UI to begin platform OIDC login.
+    const urlPath = String(req.raw.url ?? req.url ?? "").split("?")[0] ?? "";
+    const basePath = config.apiBasePath?.trim() || "/api";
+    if (urlPath === `${basePath}/admin/auth/oidc/config`) return;
+
     // 1) Break-glass: allow PLATFORM_ADMIN_KEY (server-side) if present.
     const providedKey = String(req.headers["x-platform-admin-key"] ?? "");
     if (config.platformAdminKey && providedKey && providedKey === config.platformAdminKey) {

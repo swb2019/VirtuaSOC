@@ -21,6 +21,11 @@ function isRole(value: unknown): value is LocalAuthUser["role"] {
 
 export const authPlugin: FastifyPluginAsync = fp(async (app) => {
   app.addHook("onRequest", async (req, reply) => {
+    // Public endpoint used by the SPA to begin OIDC login (must not require auth).
+    const urlPath = String(req.raw.url ?? req.url ?? "").split("?")[0] ?? "";
+    const basePath = app.config.apiBasePath?.trim() || "/api";
+    if (urlPath === `${basePath}/auth/oidc/config`) return;
+
     if (app.config.authMode === "local") {
       const authz = String(req.headers.authorization ?? "");
       if (!authz.startsWith("Bearer ")) return reply.code(401).send({ error: "Missing bearer token" });
