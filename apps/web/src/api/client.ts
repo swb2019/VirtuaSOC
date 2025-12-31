@@ -128,6 +128,18 @@ export class ApiClient {
     return (await res.json()) as { ok: boolean; distributionId: string };
   }
 
+  async exportReportMarkdown(reportId: string) {
+    const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}/export/markdown`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`export markdown failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean; markdown: string };
+  }
+
+  async exportReportJson(reportId: string) {
+    const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}/export/json`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`export json failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean; generatedAt: string; report: any; sections: any[]; evidence: any[] };
+  }
+
   async listEvidence(opts?: { q?: string; status?: "new" | "triaged"; tag?: string }) {
     const url = new URL("/api/evidence", window.location.origin);
     if (opts?.q) url.searchParams.set("q", opts.q);

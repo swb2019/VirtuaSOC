@@ -21,3 +21,4 @@ See `infra/k8s/helm/virtuasoc`.
 - `docs/deploy/ops-hardening.md` (minimal security + ops hardening)
 - `docs/deploy/oidc-entra-id.md` (Entra ID OIDC reference setup)
 - `docs/deploy/monitoring-budget.md` (monitoring + alerting, budget mode)
+- `docs/deploy/report-exports.md` (report exports: Markdown + JSON)

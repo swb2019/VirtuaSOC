@@ -7,6 +7,7 @@ import { createDraftFromDefinition, loadReportDefinitions, renderReportMarkdown 
 
 import { requireRole } from "../auth/guards.js";
 import { writeAudit } from "../audit.js";
+import type { Db } from "../db.js";
 
 type ReportRow = {
   id: string;
@@ -47,6 +48,73 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
   const defs = await loadReportDefinitions({ dir: process.env.REPORT_DEFINITIONS_DIR });
 
   const distQueue = app.config.redisUrl ? new Queue("ingest", { connection: { url: app.config.redisUrl } }) : null;
+
+  async function renderAndPersistReport(
+    db: Db,
+    tenantId: string,
+    reportId: string,
+  ): Promise<{
+    report: ReportRow;
+    sections: ReportSectionRow[];
+    evidence: { id: string; title: string | null; summary: string | null; source_uri: string | null }[];
+    evidenceIds: string[];
+    markdown: string;
+  }> {
+    const reportRows = await db<ReportRow[]>`
+      SELECT id, created_at, updated_at, definition_id, title, status, handling, severity, period_start, period_end,
+             full_markdown, evidence_ids, created_by_user_id, approved_by_user_id, approved_at
+      FROM reports
+      WHERE tenant_id = ${tenantId} AND id = ${reportId}
+    `;
+    if (!reportRows.length) throw new Error("Not found");
+    const report = reportRows[0]!;
+
+    const sectionRows = await db<ReportSectionRow[]>`
+      SELECT id, title, content_markdown, evidence_ids
+      FROM report_sections
+      WHERE report_id = ${report.id}
+      ORDER BY id ASC
+    `;
+
+    // union of all evidence ids
+    const evidenceIdSet = new Set<string>();
+    for (const s of sectionRows) for (const eid of s.evidence_ids ?? []) evidenceIdSet.add(eid);
+    for (const eid of report.evidence_ids ?? []) evidenceIdSet.add(eid);
+    const evidenceIds = Array.from(evidenceIdSet);
+
+    const evidence = evidenceIds.length
+      ? await db<{ id: string; title: string | null; summary: string | null; source_uri: string | null }[]>`
+          SELECT id, title, summary, source_uri
+          FROM evidence_items
+          WHERE tenant_id = ${tenantId} AND id = ANY(${db.array(evidenceIds, 2950)})
+        `
+      : [];
+
+    const draft = {
+      definitionId: report.definition_id,
+      title: report.title,
+      sections: sectionRows.map((s) => ({
+        id: s.id,
+        title: s.title,
+        contentMarkdown: s.content_markdown ?? "",
+        evidenceIds: s.evidence_ids ?? [],
+      })),
+      evidenceIds,
+    };
+
+    const markdown = renderReportMarkdown(
+      draft,
+      evidence.map((e) => ({ id: e.id, title: e.title, sourceUri: e.source_uri })),
+    );
+
+    await db`
+      UPDATE reports
+      SET full_markdown = ${markdown}, updated_at = NOW()
+      WHERE tenant_id = ${tenantId} AND id = ${report.id}
+    `;
+
+    return { report, sections: sectionRows, evidence, evidenceIds, markdown };
+  }
 
   app.get("/reports", async (req) => {
     const tenant = req.tenant!;
@@ -245,64 +313,51 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const actor = requireRole(req, reply, "gsoc_analyst");
     if (!actor) return;
 
-    const reportRows = await db<ReportRow[]>`
-      SELECT id, created_at, updated_at, definition_id, title, status, handling, severity, period_start, period_end,
-             full_markdown, evidence_ids, created_by_user_id, approved_by_user_id, approved_at
-      FROM reports
-      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
-    `;
-    if (!reportRows.length) return reply.code(404).send({ error: "Not found" });
-    const report = reportRows[0]!;
+    try {
+      const rendered = await renderAndPersistReport(db, tenant.id, req.params.id);
+      await writeAudit(db, tenant.id, "report.rendered", actor.sub, "report", rendered.report.id, {
+        evidenceCount: rendered.evidence.length,
+      });
+      return { ok: true, markdown: rendered.markdown };
+    } catch {
+      return reply.code(404).send({ error: "Not found" });
+    }
+  });
 
-    const sectionRows = await db<ReportSectionRow[]>`
-      SELECT id, title, content_markdown, evidence_ids
-      FROM report_sections
-      WHERE report_id = ${report.id}
-      ORDER BY id ASC
-    `;
+  app.get<{ Params: { id: string } }>("/reports/:id/export/markdown", async (req, reply) => {
+    const tenant = req.tenant!;
+    const db = req.tenantDb!;
+    const actor = requireRole(req, reply, "gsoc_analyst");
+    if (!actor) return;
 
-    // union of all evidence ids
-    const evidenceIdSet = new Set<string>();
-    for (const s of sectionRows) for (const eid of s.evidence_ids ?? []) evidenceIdSet.add(eid);
-    for (const eid of report.evidence_ids ?? []) evidenceIdSet.add(eid);
-    const evidenceIds = Array.from(evidenceIdSet);
+    try {
+      const rendered = await renderAndPersistReport(db, tenant.id, req.params.id);
+      await writeAudit(db, tenant.id, "report.exported.markdown", actor.sub, "report", rendered.report.id);
+      return { ok: true, markdown: rendered.markdown };
+    } catch {
+      return reply.code(404).send({ error: "Not found" });
+    }
+  });
 
-    const evidence = evidenceIds.length
-      ? await db<{ id: string; title: string | null; source_uri: string | null }[]>`
-          SELECT id, title, source_uri
-          FROM evidence_items
-          WHERE tenant_id = ${tenant.id} AND id = ANY(${db.array(evidenceIds, 2950)})
-        `
-      : [];
+  app.get<{ Params: { id: string } }>("/reports/:id/export/json", async (req, reply) => {
+    const tenant = req.tenant!;
+    const db = req.tenantDb!;
+    const actor = requireRole(req, reply, "gsoc_analyst");
+    if (!actor) return;
 
-    const draft = {
-      definitionId: report.definition_id,
-      title: report.title,
-      sections: sectionRows.map((s) => ({
-        id: s.id,
-        title: s.title,
-        contentMarkdown: s.content_markdown ?? "",
-        evidenceIds: s.evidence_ids ?? [],
-      })),
-      evidenceIds,
-    };
-
-    const markdown = renderReportMarkdown(
-      draft,
-      evidence.map((e) => ({ id: e.id, title: e.title, sourceUri: e.source_uri })),
-    );
-
-    await db`
-      UPDATE reports
-      SET full_markdown = ${markdown}, updated_at = NOW()
-      WHERE tenant_id = ${tenant.id} AND id = ${report.id}
-    `;
-
-    await writeAudit(db, tenant.id, "report.rendered", actor.sub, "report", report.id, {
-      evidenceCount: evidence.length,
-    });
-
-    return { ok: true, markdown };
+    try {
+      const rendered = await renderAndPersistReport(db, tenant.id, req.params.id);
+      await writeAudit(db, tenant.id, "report.exported.json", actor.sub, "report", rendered.report.id);
+      return {
+        ok: true,
+        generatedAt: new Date().toISOString(),
+        report: rendered.report,
+        sections: rendered.sections,
+        evidence: rendered.evidence,
+      };
+    } catch {
+      return reply.code(404).send({ error: "Not found" });
+    }
   });
 
   app.get<{ Params: { id: string } }>("/reports/:id/distributions", async (req, reply) => {
