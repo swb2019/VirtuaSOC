@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
+import { resolve } from "node:path";
 
 import { createDb, type Db } from "../db.js";
+import { runSqlMigrations } from "../migrations/migrator.js";
 import { getTenantBySlug, getTenantDbDsn, type TenantRecord } from "./controlPlane.js";
 
 declare module "fastify" {
@@ -58,6 +60,13 @@ export const tenancyPlugin: FastifyPluginAsync = fp(async (app) => {
     let tenantDb = cache.get(tenant.id);
     if (!tenantDb) {
       const dsn = await getTenantDbDsn(app.controlDb, tenant.id, app.config.tenantDsnEncryptionKey);
+
+      // Economical default: keep tenant DB schema up to date automatically (safe for our single-replica budget mode).
+      if ((process.env.AUTO_MIGRATE_TENANT ?? "true") !== "false") {
+        const dir = resolve(process.cwd(), "apps/api/migrations-tenant");
+        await runSqlMigrations(dsn, dir);
+      }
+
       tenantDb = createDb(dsn);
       cache.set(tenant.id, tenantDb);
     }

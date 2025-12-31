@@ -117,6 +117,41 @@ export class ApiClient {
     if (!res.ok) throw new Error(`list evidence failed: ${res.status}`);
     return (await res.json()) as { evidence: any[] };
   }
+
+  async listRssFeeds() {
+    const res = await fetch("/api/rss-feeds", { headers: this.headers() });
+    if (!res.ok) throw new Error(`list rss feeds failed: ${res.status}`);
+    return (await res.json()) as { feeds: { id: string; createdAt: string; url: string; title: string | null; enabled: boolean }[] };
+  }
+
+  async addRssFeed(url: string, title?: string) {
+    const res = await fetch("/api/rss-feeds", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ url, title }),
+    });
+    if (!res.ok) throw new Error(`add rss feed failed: ${res.status}`);
+    return (await res.json()) as { id: string; inserted: boolean };
+  }
+
+  async updateRssFeed(id: string, patch: { enabled?: boolean; title?: string }) {
+    const res = await fetch(`/api/rss-feeds/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`update rss feed failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean };
+  }
+
+  async deleteRssFeed(id: string) {
+    const res = await fetch(`/api/rss-feeds/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`delete rss feed failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean };
+  }
 }
 
 export type AdminApiClientOpts = {
