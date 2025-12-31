@@ -1,0 +1,4 @@
+ALTER TABLE evidence_items
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+

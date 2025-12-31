@@ -19,6 +19,7 @@ import { oidcConfigRoutes } from "./routes/oidcConfig.js";
 import { authPlugin } from "./auth/plugin.js";
 import { reportDefinitionsRoutes } from "./routes/reportDefinitions.js";
 import { evidenceRoutes } from "./routes/evidence.js";
+import { ingestWebhookRoutes } from "./routes/ingestWebhook.js";
 import { reportsRoutes } from "./routes/reports.js";
 import { runSqlMigrations } from "./migrations/migrator.js";
 
@@ -88,6 +89,7 @@ export async function createApp() {
     await tenantScoped.register(tenantHealthRoutes);
     await tenantScoped.register(reportDefinitionsRoutes);
     await tenantScoped.register(evidenceRoutes);
+    await tenantScoped.register(ingestWebhookRoutes);
     await tenantScoped.register(reportsRoutes);
   }, { prefix: basePath });
 
