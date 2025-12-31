@@ -32,8 +32,8 @@ ingress:
         - "app.virtuasoc.com"
 
 env:
-  # Budget-mode default until you configure an enterprise OIDC IdP.
-  authMode: local
+  # Production: enterprise OIDC enabled (tenant OIDC config is stored in the control-plane DB).
+  authMode: oidc
 
 secrets:
   # Create the Kubernetes secret out-of-band (or via Infisical/ESO), not in git.
