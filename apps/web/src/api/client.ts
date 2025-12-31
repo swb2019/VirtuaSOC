@@ -54,11 +54,11 @@ export class ApiClient {
     return (await res.json()) as { reports: any[] };
   }
 
-  async createReport(definitionId: string, title?: string) {
+  async createReport(definitionId: string, title?: string, evidenceIds?: string[]) {
     const res = await fetch("/api/reports", {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({ definitionId, title }),
+      body: JSON.stringify({ definitionId, title, evidenceIds }),
     });
     if (!res.ok) throw new Error(`create report failed: ${res.status}`);
     return (await res.json()) as { id: string };
@@ -110,12 +110,24 @@ export class ApiClient {
     return (await res.json()) as { ok: boolean };
   }
 
-  async listEvidence(q?: string) {
+  async listEvidence(opts?: { q?: string; status?: "new" | "triaged"; tag?: string }) {
     const url = new URL("/api/evidence", window.location.origin);
-    if (q) url.searchParams.set("q", q);
+    if (opts?.q) url.searchParams.set("q", opts.q);
+    if (opts?.status) url.searchParams.set("status", opts.status);
+    if (opts?.tag) url.searchParams.set("tag", opts.tag);
     const res = await fetch(url.toString().replace(window.location.origin, ""), { headers: this.headers() });
     if (!res.ok) throw new Error(`list evidence failed: ${res.status}`);
     return (await res.json()) as { evidence: any[] };
+  }
+
+  async updateEvidence(id: string, patch: { triageStatus?: "new" | "triaged"; tags?: string[] }) {
+    const res = await fetch(`/api/evidence/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`update evidence failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean };
   }
 
   async listRssFeeds() {

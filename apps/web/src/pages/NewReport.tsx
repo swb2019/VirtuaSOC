@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 
 import { ApiClient } from "../api/client";
@@ -8,6 +9,7 @@ export function NewReportPage() {
   const { token, tenantSlug } = useAuth();
   const api = useMemo(() => new ApiClient({ token: token ?? undefined, tenantSlug }), [token, tenantSlug]);
   const nav = useNavigate();
+  const loc = useLocation();
 
   const [defs, setDefs] = useState<{ id: string; title: string; description: string }[]>([]);
   const [definitionId, setDefinitionId] = useState<string>("sitrep");
@@ -27,7 +29,11 @@ export function NewReportPage() {
 
   async function create() {
     setErr(null);
-    const created = await api.createReport(definitionId, title.trim() ? title.trim() : undefined);
+    const url = new URL(loc.pathname + loc.search, window.location.origin);
+    const evidenceId = url.searchParams.get("evidenceId")?.trim() || "";
+    const evidenceIds = evidenceId ? [evidenceId] : undefined;
+
+    const created = await api.createReport(definitionId, title.trim() ? title.trim() : undefined, evidenceIds);
     nav(`/reports/${created.id}`);
   }
 
@@ -41,6 +47,16 @@ export function NewReportPage() {
       {err ? <div className="rounded-xl border border-rose-900/50 bg-rose-950/20 p-4 text-sm text-rose-200">{err}</div> : null}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+        {(() => {
+          const url = new URL(loc.pathname + loc.search, window.location.origin);
+          const evidenceId = url.searchParams.get("evidenceId")?.trim() || "";
+          if (!evidenceId) return null;
+          return (
+            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/30 p-4 text-sm text-slate-200">
+              This report will include evidence <code className="text-slate-300">{evidenceId}</code>.
+            </div>
+          );
+        })()}
         <label className="block text-sm font-semibold text-slate-200">Definition</label>
         <select
           value={definitionId}

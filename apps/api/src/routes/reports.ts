@@ -61,6 +61,25 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const def = defs.find((d) => d.id === req.body.definitionId);
     if (!def) return reply.code(400).send({ error: "Unknown definitionId" });
 
+    const evidenceIds = Array.isArray((req.body as any)?.evidenceIds)
+      ? Array.from(
+          new Set(
+            ((req.body as any).evidenceIds as any[]).map(String).map((s) => s.trim()).filter(Boolean),
+          ),
+        )
+      : [];
+
+    if (evidenceIds.length) {
+      const found = await db<{ id: string }[]>`
+        SELECT id
+        FROM evidence_items
+        WHERE tenant_id = ${tenant.id} AND id = ANY(${db.array(evidenceIds, 2950)})
+      `;
+      if (found.length !== evidenceIds.length) {
+        return reply.code(400).send({ error: "One or more evidenceIds are invalid for this tenant" });
+      }
+    }
+
     const reportId = randomUUID();
     const now = new Date().toISOString();
     const draft = createDraftFromDefinition(def, req.body.title);
@@ -78,7 +97,7 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
           ${draft.title},
           ${"draft"},
           ${"internal"},
-          ${tx.array([], 2950)},
+          ${evidenceIds.length ? tx.array(evidenceIds, 2950) : tx.array([], 2950)},
           ${actor.sub}
         )
       `;
@@ -93,6 +112,7 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
 
     await writeAudit(db, tenant.id, "report.created", actor.sub, "report", reportId, {
       definitionId: draft.definitionId,
+      evidenceCount: evidenceIds.length,
     });
 
     return reply.code(201).send({ id: reportId });
