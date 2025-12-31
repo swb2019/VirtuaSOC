@@ -9,6 +9,7 @@ import { runRetentionCleanup, type RetentionCleanupJobPayload } from "./maintena
 import { JOBS, QUEUES } from "./queues.js";
 import { getTenantDbDsn, listTenants } from "./tenancy/controlPlane.js";
 import { runAutoSitrep, type AutoSitrepJobPayload } from "./reports/autoSitrep.js";
+import { distributeReport, type DistributeReportJobPayload } from "./reports/distributeReport.js";
 
 const DEFAULT_RSS_FEEDS = [
   "https://www.cisa.gov/uscert/ncas/alerts.xml",
@@ -136,6 +137,12 @@ async function main() {
         const payload = job.data as AutoSitrepJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
         await runAutoSitrep(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.distributeReport) {
+        const payload = job.data as DistributeReportJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await distributeReport(tenantDb, payload);
         return;
       }
     },

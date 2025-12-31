@@ -110,6 +110,24 @@ export class ApiClient {
     return (await res.json()) as { ok: boolean };
   }
 
+  async listDistributions(reportId: string) {
+    const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}/distributions`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`list distributions failed: ${res.status}`);
+    return (await res.json()) as {
+      distributions: { id: string; createdAt: string; channel: string; target: string; status: string; sentAt: string | null; error: string | null }[];
+    };
+  }
+
+  async distributeReport(reportId: string, body: { channel: "email" | "teams"; target?: string; subject?: string }) {
+    const res = await fetch(`/api/reports/${encodeURIComponent(reportId)}/distribute`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`distribute report failed: ${res.status}`);
+    return (await res.json()) as { ok: boolean; distributionId: string };
+  }
+
   async listEvidence(opts?: { q?: string; status?: "new" | "triaged"; tag?: string }) {
     const url = new URL("/api/evidence", window.location.origin);
     if (opts?.q) url.searchParams.set("q", opts.q);

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { FastifyPluginAsync } from "fastify";
+import { Queue } from "bullmq";
 
 import { createDraftFromDefinition, loadReportDefinitions, renderReportMarkdown } from "@virtuasoc/reporting";
 
@@ -32,8 +33,20 @@ type ReportSectionRow = {
   evidence_ids: string[];
 };
 
+type DistributionRow = {
+  id: string;
+  created_at: string;
+  channel: string;
+  target: string;
+  status: string;
+  sent_at: string | null;
+  error: string | null;
+};
+
 export const reportsRoutes: FastifyPluginAsync = async (app) => {
   const defs = await loadReportDefinitions({ dir: process.env.REPORT_DEFINITIONS_DIR });
+
+  const distQueue = app.config.redisUrl ? new Queue("ingest", { connection: { url: app.config.redisUrl } }) : null;
 
   app.get("/reports", async (req) => {
     const tenant = req.tenant!;
@@ -187,10 +200,16 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const updated = await db<{ id: string }[]>`
       UPDATE reports
       SET status = ${"in_review"}, updated_at = NOW()
-      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
+      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id} AND status = ${"draft"}
       RETURNING id
     `;
-    if (!updated.length) return reply.code(404).send({ error: "Not found" });
+    if (!updated.length) {
+      const rows = await db<{ status: string }[]>`
+        SELECT status FROM reports WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
+      `;
+      if (!rows.length) return reply.code(404).send({ error: "Not found" });
+      return reply.code(409).send({ error: `Invalid transition: ${rows[0]!.status} -> in_review` });
+    }
 
     await writeAudit(db, tenant.id, "report.submitted", actor.sub, "report", req.params.id);
     return { ok: true };
@@ -205,10 +224,16 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const updated = await db<{ id: string }[]>`
       UPDATE reports
       SET status = ${"approved"}, approved_by_user_id = ${actor.sub}, approved_at = NOW(), updated_at = NOW()
-      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
+      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id} AND status = ${"in_review"}
       RETURNING id
     `;
-    if (!updated.length) return reply.code(404).send({ error: "Not found" });
+    if (!updated.length) {
+      const rows = await db<{ status: string }[]>`
+        SELECT status FROM reports WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
+      `;
+      if (!rows.length) return reply.code(404).send({ error: "Not found" });
+      return reply.code(409).send({ error: `Invalid transition: ${rows[0]!.status} -> approved` });
+    }
 
     await writeAudit(db, tenant.id, "report.approved", actor.sub, "report", req.params.id);
     return { ok: true };
@@ -278,6 +303,91 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { ok: true, markdown };
+  });
+
+  app.get<{ Params: { id: string } }>("/reports/:id/distributions", async (req, reply) => {
+    const tenant = req.tenant!;
+    const db = req.tenantDb!;
+    const actor = requireRole(req, reply, "gsoc_analyst");
+    if (!actor) return;
+
+    const rows = await db<DistributionRow[]>`
+      SELECT id, created_at, channel, target, status, sent_at, error
+      FROM distribution_records
+      WHERE tenant_id = ${tenant.id} AND report_id = ${req.params.id}
+      ORDER BY created_at DESC
+      LIMIT 100
+    `;
+    return {
+      distributions: rows.map((r) => ({
+        id: r.id,
+        createdAt: r.created_at,
+        channel: r.channel,
+        target: r.target,
+        status: r.status,
+        sentAt: r.sent_at,
+        error: r.error,
+      })),
+    };
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { channel: "email" | "teams"; target?: string; subject?: string };
+  }>("/reports/:id/distribute", async (req, reply) => {
+    const tenant = req.tenant!;
+    const db = req.tenantDb!;
+    const actor = requireRole(req, reply, "gsoc_lead");
+    if (!actor) return;
+
+    if (!distQueue) return reply.code(501).send({ error: "REDIS_URL not configured" });
+
+    const channel = req.body?.channel;
+    if (channel !== "email" && channel !== "teams") {
+      return reply.code(400).send({ error: "channel must be email|teams" });
+    }
+
+    const reportRows = await db<ReportRow[]>`
+      SELECT id, title, status
+      FROM reports
+      WHERE tenant_id = ${tenant.id} AND id = ${req.params.id}
+    `;
+    if (!reportRows.length) return reply.code(404).send({ error: "Not found" });
+    const report = reportRows[0]!;
+
+    if (app.config.distributionRequireApproval && report.status !== "approved") {
+      return reply.code(409).send({ error: "Report must be approved before distribution" });
+    }
+
+    const targetRaw = typeof req.body?.target === "string" ? req.body.target.trim() : "";
+    if (channel === "email" && !targetRaw) {
+      return reply.code(400).send({ error: "target is required for email" });
+    }
+
+    const subject =
+      (typeof req.body?.subject === "string" ? req.body.subject.trim() : "") || report.title || "VirtuaSOC Report";
+
+    const distributionId = randomUUID();
+    const target = channel === "email" ? targetRaw : "teams";
+
+    await db`
+      INSERT INTO distribution_records (id, tenant_id, report_id, channel, target, status)
+      VALUES (${distributionId}, ${tenant.id}, ${report.id}, ${channel}, ${target}, ${"queued"})
+    `;
+
+    await distQueue.add(
+      "reports.distribute",
+      { tenantId: tenant.id, reportId: report.id, distributionId, channel, target: channel === "email" ? targetRaw : undefined, subject, actorSub: actor.sub },
+      { jobId: distributionId, attempts: 3, backoff: { type: "fixed", delay: 60_000 }, removeOnComplete: 100, removeOnFail: 100 },
+    );
+
+    await writeAudit(db, tenant.id, "report.distribution.queued", actor.sub, "report", report.id, {
+      distributionId,
+      channel,
+      target,
+    });
+
+    return reply.code(202).send({ ok: true, distributionId });
   });
 };
 

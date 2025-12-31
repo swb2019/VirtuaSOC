@@ -12,6 +12,11 @@ export function ReportDetailPage() {
   const [report, setReport] = useState<any | null>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [markdown, setMarkdown] = useState<string>("");
+  const [distributions, setDistributions] = useState<any[]>([]);
+  const [distChannel, setDistChannel] = useState<"teams" | "email">("teams");
+  const [distTarget, setDistTarget] = useState<string>("");
+  const [distSubject, setDistSubject] = useState<string>("");
+  const [distSending, setDistSending] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,9 +27,24 @@ export function ReportDetailPage() {
         setReport(r.report);
         setSections(r.sections);
         setMarkdown(r.report.full_markdown ?? "");
+        setDistSubject((r.report?.title ?? "").toString());
       })
       .catch((e) => setErr(String(e?.message ?? e)));
   }, [api, id]);
+
+  useEffect(() => {
+    if (!id) return;
+    api
+      .listDistributions(id)
+      .then((r) => setDistributions(r.distributions))
+      .catch((e) => setErr(String(e?.message ?? e)));
+  }, [api, id]);
+
+  async function refreshDistributions() {
+    if (!id) return;
+    const r = await api.listDistributions(id);
+    setDistributions(r.distributions);
+  }
 
   async function saveSection(sectionId: string, contentMarkdown: string) {
     if (!id) return;
@@ -51,6 +71,35 @@ export function ReportDetailPage() {
     setReport(r.report);
   }
 
+  async function distribute() {
+    if (!id || !report) return;
+    setErr(null);
+
+    if (report.status !== "approved") {
+      throw new Error("Report must be approved before distribution.");
+    }
+
+    const subject = distSubject.trim() || report.title || "VirtuaSOC Report";
+    const body =
+      distChannel === "email"
+        ? { channel: "email" as const, target: distTarget.trim(), subject }
+        : { channel: "teams" as const, subject };
+
+    if (distChannel === "email" && !distTarget.trim()) {
+      throw new Error("Email target is required.");
+    }
+
+    setDistSending(true);
+    try {
+      await api.distributeReport(id, body);
+      await refreshDistributions();
+      // worker sends async; refresh shortly after too
+      setTimeout(() => refreshDistributions().catch(() => {}), 2500);
+    } finally {
+      setDistSending(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {err ? <div className="rounded-xl border border-rose-900/50 bg-rose-950/20 p-4 text-sm text-rose-200">{err}</div> : null}
@@ -73,17 +122,116 @@ export function ReportDetailPage() {
               </button>
               <button
                 onClick={() => submit().catch((e) => setErr(String(e?.message ?? e)))}
+                disabled={report.status !== "draft"}
                 className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
               >
                 Submit
               </button>
               <button
                 onClick={() => approve().catch((e) => setErr(String(e?.message ?? e)))}
+                disabled={report.status !== "in_review"}
                 className="rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-slate-700"
               >
                 Approve
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {report ? (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-200">Distribution</div>
+              <div className="mt-1 text-xs text-slate-500">
+                Default policy: distribution requires <code>approved</code>.
+              </div>
+            </div>
+            <button
+              onClick={() => refreshDistributions().catch((e) => setErr(String(e?.message ?? e)))}
+              className="rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-slate-700"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <div className="lg:col-span-1">
+              <label className="block text-xs font-semibold text-slate-400">Channel</label>
+              <select
+                value={distChannel}
+                onChange={(e) => setDistChannel(e.target.value as any)}
+                className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="teams">Teams</option>
+                <option value="email">Email</option>
+              </select>
+            </div>
+            <div className="lg:col-span-2">
+              <label className="block text-xs font-semibold text-slate-400">Target</label>
+              <input
+                value={distTarget}
+                onChange={(e) => setDistTarget(e.target.value)}
+                placeholder={distChannel === "email" ? "user@example.com" : "(uses server TEAMS_WEBHOOK_URL)"}
+                disabled={distChannel !== "email"}
+                className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 disabled:opacity-60"
+              />
+            </div>
+            <div className="lg:col-span-1">
+              <label className="block text-xs font-semibold text-slate-400">Subject</label>
+              <input
+                value={distSubject}
+                onChange={(e) => setDistSubject(e.target.value)}
+                placeholder={report.title}
+                className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={() => distribute().catch((e) => setErr(String(e?.message ?? e)))}
+              disabled={distSending || report.status !== "approved"}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {distSending ? "Queueing…" : "Distribute"}
+            </button>
+          </div>
+
+          <div className="mt-6 overflow-hidden rounded-xl border border-slate-800">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-950/60 text-left text-slate-300">
+                <tr>
+                  <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Channel</th>
+                  <th className="px-4 py-3">Target</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-900/30">
+                {distributions.map((d) => (
+                  <tr key={d.id}>
+                    <td className="px-4 py-3 text-slate-400">{new Date(d.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-200">{d.channel}</td>
+                    <td className="px-4 py-3 text-slate-300">{d.target}</td>
+                    <td className="px-4 py-3 text-slate-200">
+                      <div className="flex flex-col">
+                        <div>{d.status}</div>
+                        {d.error ? <div className="mt-1 text-xs text-rose-300">{d.error}</div> : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!distributions.length ? (
+                  <tr>
+                    <td className="px-4 py-6 text-slate-400" colSpan={4}>
+                      No distribution activity yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : null}
