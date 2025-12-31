@@ -22,6 +22,8 @@ import { evidenceRoutes } from "./routes/evidence.js";
 import { ingestWebhookRoutes } from "./routes/ingestWebhook.js";
 import { rssFeedsRoutes } from "./routes/rssFeeds.js";
 import { reportsRoutes } from "./routes/reports.js";
+import { assistantRoutes } from "./routes/assistant.js";
+import { adminAssistantRoutes } from "./routes/adminAssistant.js";
 import { runSqlMigrations } from "./migrations/migrator.js";
 
 declare module "fastify" {
@@ -83,6 +85,7 @@ export async function createApp() {
   app.get(`${basePath}/health`, async () => ({ ok: true }));
   await app.register(adminTenantsRoutes, { prefix: basePath });
   await app.register(adminAuditRoutes, { prefix: basePath });
+  await app.register(adminAssistantRoutes, { prefix: basePath });
   await app.register(async (tenantScoped) => {
     await tenantScoped.register(tenancyPlugin);
     await tenantScoped.register(oidcConfigRoutes);
@@ -93,6 +96,7 @@ export async function createApp() {
     await tenantScoped.register(ingestWebhookRoutes);
     await tenantScoped.register(rssFeedsRoutes);
     await tenantScoped.register(reportsRoutes);
+    await tenantScoped.register(assistantRoutes);
   }, { prefix: basePath });
 
   return app;

@@ -22,6 +22,14 @@ export type ApiConfig = {
   platformOidcRoleMapping: Record<string, string>;
 
   distributionRequireApproval: boolean;
+
+  // AI Setup Assistant (OpenAI)
+  aiSetupEnabled: boolean;
+  openAiApiKey?: string;
+  openAiModel: string;
+  aiSetupMaxToolCalls: number;
+  aiSetupMaxOutputTokens: number;
+  aiSetupMaxRequestsPerTenantPerDay: number;
 };
 
 export function getConfig(): ApiConfig {
@@ -60,6 +68,22 @@ export function getConfig(): ApiConfig {
     }
   }
 
+  const aiSetupEnabled = (process.env.AI_SETUP_ENABLED ?? "").trim().toLowerCase() === "true";
+  const openAiApiKey = (process.env.OPENAI_API_KEY ?? "").trim() || undefined;
+  const openAiModel = (process.env.OPENAI_MODEL ?? "").trim() || "gpt-5.2";
+  const aiSetupMaxToolCalls = Math.max(
+    0,
+    Math.min(20, Number(process.env.AI_SETUP_MAX_TOOL_CALLS ?? "5") || 5),
+  );
+  const aiSetupMaxOutputTokens = Math.max(
+    64,
+    Math.min(2000, Number(process.env.AI_SETUP_MAX_OUTPUT_TOKENS ?? "600") || 600),
+  );
+  const aiSetupMaxRequestsPerTenantPerDay = Math.max(
+    1,
+    Math.min(500, Number(process.env.AI_SETUP_MAX_REQUESTS_PER_TENANT_PER_DAY ?? "50") || 50),
+  );
+
   return {
     port,
     host,
@@ -83,5 +107,12 @@ export function getConfig(): ApiConfig {
     platformOidcRoleMapping,
 
     distributionRequireApproval: (process.env.DISTRIBUTION_REQUIRE_APPROVAL ?? "true") !== "false",
+
+    aiSetupEnabled,
+    openAiApiKey,
+    openAiModel,
+    aiSetupMaxToolCalls,
+    aiSetupMaxOutputTokens,
+    aiSetupMaxRequestsPerTenantPerDay,
   };
 }
