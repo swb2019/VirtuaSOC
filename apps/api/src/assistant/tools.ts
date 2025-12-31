@@ -1,8 +1,17 @@
-import { randomUUID } from "node:crypto";
-
 import type { Db } from "../db.js";
-import { writeAudit } from "../audit.js";
 import type { AssistantToolSpec } from "../ai/assistantAgent.js";
+import {
+  deleteEmailTarget,
+  deleteRssFeed,
+  getIngestPrefs,
+  listDistributionTargets,
+  listRssFeeds,
+  setIngestPrefs,
+  setRssFeedEnabled,
+  setTeamsWebhook,
+  upsertEmailTarget,
+  upsertRssFeed,
+} from "../tenancy/settings.js";
 
 export type SetupAssistantContext = {
   tenantId: string;
@@ -33,15 +42,11 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       description: "List RSS feeds configured for this tenant.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
       run: async () => {
-        const rows = await db<
-          { id: string; created_at: string; url: string; title: string | null; enabled: boolean }[]
-        >`
-          SELECT id, created_at, url, title, enabled
-          FROM rss_feeds
-          WHERE tenant_id = ${tenantId}
-          ORDER BY created_at DESC
-        `;
-        return { ok: true, feeds: rows.map((r) => ({ id: r.id, createdAt: r.created_at, url: r.url, title: r.title, enabled: r.enabled })) };
+        const rows = await listRssFeeds(db, tenantId);
+        return {
+          ok: true,
+          feeds: rows.map((r) => ({ id: r.id, createdAt: r.created_at, url: r.url, title: r.title, enabled: r.enabled })),
+        };
       },
     },
     {
@@ -59,32 +64,15 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const url = String(a.url ?? "").trim();
-        if (!url) return { ok: false, error: "url is required" };
-        if (!isValidHttpUrl(url)) return { ok: false, error: "url must be http(s)" };
-
-        const title = typeof a.title === "string" ? a.title.trim() || null : null;
-        const enabled = typeof a.enabled === "boolean" ? a.enabled : true;
-        const id = randomUUID();
-
-        const rows = await db<{ id: string; inserted: boolean; enabled: boolean }[]>`
-          INSERT INTO rss_feeds (id, tenant_id, url, title, enabled)
-          VALUES (${id}, ${tenantId}, ${url}, ${title}, ${enabled})
-          ON CONFLICT (tenant_id, url)
-          DO UPDATE SET
-            enabled = EXCLUDED.enabled,
-            title = COALESCE(EXCLUDED.title, rss_feeds.title)
-          RETURNING id, (xmax = 0) as inserted, enabled
-        `;
-        const saved = rows[0]!;
-
-        await writeAudit(db, tenantId, "rss_feed.upserted", actorSub, "rss_feed", saved.id, {
-          url,
-          inserted: saved.inserted,
-          enabled: saved.enabled,
-        });
-
-        return { ok: true, id: saved.id, inserted: saved.inserted, enabled: saved.enabled };
+        try {
+          const url = String(a.url ?? "");
+          const title = typeof a.title === "string" ? a.title : null;
+          const enabled = typeof a.enabled === "boolean" ? a.enabled : undefined;
+          const saved = await upsertRssFeed(db, tenantId, actorSub, { url, title: title ?? undefined, enabled });
+          return { ok: true, ...saved };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
+        }
       },
     },
     {
@@ -101,23 +89,14 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const url = String(a.url ?? "").trim();
-        const enabled = Boolean(a.enabled);
-        if (!url) return { ok: false, error: "url is required" };
-
-        const rows = await db<{ id: string }[]>`
-          SELECT id FROM rss_feeds WHERE tenant_id = ${tenantId} AND url = ${url}
-        `;
-        if (!rows.length) return { ok: false, error: "feed not found" };
-        const id = rows[0]!.id;
-
-        await db`
-          UPDATE rss_feeds
-          SET enabled = ${enabled}
-          WHERE tenant_id = ${tenantId} AND url = ${url}
-        `;
-        await writeAudit(db, tenantId, "rss_feed.updated", actorSub, "rss_feed", id, { enabled });
-        return { ok: true };
+        try {
+          const url = String(a.url ?? "");
+          const enabled = Boolean(a.enabled);
+          await setRssFeedEnabled(db, tenantId, actorSub, url, enabled);
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
+        }
       },
     },
     {
@@ -131,16 +110,13 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const url = String(a.url ?? "").trim();
-        if (!url) return { ok: false, error: "url is required" };
-        const deleted = await db<{ id: string }[]>`
-          DELETE FROM rss_feeds
-          WHERE tenant_id = ${tenantId} AND url = ${url}
-          RETURNING id
-        `;
-        if (!deleted.length) return { ok: false, error: "feed not found" };
-        await writeAudit(db, tenantId, "rss_feed.deleted", actorSub, "rss_feed", deleted[0]!.id);
-        return { ok: true };
+        try {
+          const url = String(a.url ?? "");
+          await deleteRssFeed(db, tenantId, actorSub, url);
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
+        }
       },
     },
 
@@ -151,22 +127,10 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       parameters: { type: "object", additionalProperties: false, properties: {} },
       run: async () => {
         try {
-          const rows = await db<
-            { rss_default_tags: string[]; rss_auto_triage_status: string }[]
-          >`
-            SELECT rss_default_tags, rss_auto_triage_status
-            FROM ingest_prefs
-            WHERE tenant_id = ${tenantId}
-            LIMIT 1
-          `;
-          const r = rows[0];
-          return {
-            ok: true,
-            rssDefaultTags: r?.rss_default_tags ?? [],
-            rssAutoTriageStatus: (r?.rss_auto_triage_status ?? "new") as string,
-          };
+          const prefs = await getIngestPrefs(db, tenantId);
+          return { ok: true, ...prefs };
         } catch (err) {
-          return { ok: false, error: "ingest_prefs not available yet (migrations not applied)" };
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
@@ -184,41 +148,16 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const rssDefaultTags = Array.isArray(a.rssDefaultTags)
-          ? Array.from(new Set(a.rssDefaultTags.map(String).map((t: string) => t.trim()).filter(Boolean)))
-          : undefined;
-        const rssAutoTriageStatus =
-          a.rssAutoTriageStatus === "new" || a.rssAutoTriageStatus === "triaged"
-            ? (a.rssAutoTriageStatus as string)
-            : undefined;
-
-        if (rssDefaultTags === undefined && rssAutoTriageStatus === undefined) {
-          return { ok: false, error: "No fields provided" };
-        }
-
         try {
-          await db`
-            INSERT INTO ingest_prefs (tenant_id, rss_default_tags, rss_auto_triage_status)
-            VALUES (
-              ${tenantId},
-              ${rssDefaultTags ? db.array(rssDefaultTags, 1009) : db.array([], 1009)},
-              ${rssAutoTriageStatus ?? "new"}
-            )
-            ON CONFLICT (tenant_id)
-            DO UPDATE SET
-              rss_default_tags = COALESCE(${rssDefaultTags ? db.array(rssDefaultTags, 1009) : null}, ingest_prefs.rss_default_tags),
-              rss_auto_triage_status = COALESCE(${rssAutoTriageStatus as any}, ingest_prefs.rss_auto_triage_status),
-              updated_at = NOW()
-          `;
-
-          await writeAudit(db, tenantId, "ingest_prefs.updated", actorSub, "ingest_prefs", tenantId, {
-            rssDefaultTags,
-            rssAutoTriageStatus,
-          });
-
+          const patch: any = {};
+          if (Array.isArray(a.rssDefaultTags)) patch.rssDefaultTags = a.rssDefaultTags.map(String);
+          if (a.rssAutoTriageStatus === "new" || a.rssAutoTriageStatus === "triaged") {
+            patch.rssAutoTriageStatus = a.rssAutoTriageStatus;
+          }
+          await setIngestPrefs(db, tenantId, actorSub, patch);
           return { ok: true };
-        } catch {
-          return { ok: false, error: "ingest_prefs not available yet (migrations not applied)" };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
@@ -230,17 +169,10 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       parameters: { type: "object", additionalProperties: false, properties: {} },
       run: async () => {
         try {
-          const rows = await db<
-            { id: string; created_at: string; kind: string; label: string | null; value: string; enabled: boolean }[]
-          >`
-            SELECT id, created_at, kind, label, value, enabled
-            FROM distribution_targets
-            WHERE tenant_id = ${tenantId}
-            ORDER BY created_at DESC
-          `;
-          return { ok: true, targets: rows.map((r) => ({ id: r.id, createdAt: r.created_at, kind: r.kind, label: r.label, value: r.value, enabled: r.enabled })) };
-        } catch {
-          return { ok: false, error: "distribution_targets not available yet (migrations not applied)" };
+          const targets = await listDistributionTargets(db, tenantId);
+          return { ok: true, targets };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
@@ -259,29 +191,14 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const email = String(a.email ?? "").trim();
-        if (!email) return { ok: false, error: "email is required" };
-        if (!isValidEmail(email)) return { ok: false, error: "invalid email" };
-        const label = typeof a.label === "string" ? a.label.trim() || null : null;
-        const enabled = typeof a.enabled === "boolean" ? a.enabled : true;
-
         try {
-          const id = randomUUID();
-          const rows = await db<{ id: string; inserted: boolean }[]>`
-            INSERT INTO distribution_targets (id, tenant_id, kind, label, value, enabled)
-            VALUES (${id}, ${tenantId}, ${"email"}, ${label}, ${email}, ${enabled})
-            ON CONFLICT (tenant_id, kind, value)
-            DO UPDATE SET
-              enabled = EXCLUDED.enabled,
-              label = COALESCE(EXCLUDED.label, distribution_targets.label),
-              updated_at = NOW()
-            RETURNING id, (xmax = 0) as inserted
-          `;
-          const saved = rows[0]!;
-          await writeAudit(db, tenantId, "distribution_target.email.upserted", actorSub, "distribution_target", saved.id, { email, enabled, label });
-          return { ok: true, id: saved.id, inserted: saved.inserted };
-        } catch {
-          return { ok: false, error: "distribution_targets not available yet (migrations not applied)" };
+          const email = String(a.email ?? "");
+          const label = typeof a.label === "string" ? a.label : null;
+          const enabled = typeof a.enabled === "boolean" ? a.enabled : undefined;
+          const saved = await upsertEmailTarget(db, tenantId, actorSub, { email, label: label ?? undefined, enabled });
+          return { ok: true, ...saved };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
@@ -296,19 +213,12 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const email = String(a.email ?? "").trim();
-        if (!email) return { ok: false, error: "email is required" };
         try {
-          const deleted = await db<{ id: string }[]>`
-            DELETE FROM distribution_targets
-            WHERE tenant_id = ${tenantId} AND kind = ${"email"} AND value = ${email}
-            RETURNING id
-          `;
-          if (!deleted.length) return { ok: false, error: "not found" };
-          await writeAudit(db, tenantId, "distribution_target.email.deleted", actorSub, "distribution_target", deleted[0]!.id, { email });
+          const email = String(a.email ?? "");
+          await deleteEmailTarget(db, tenantId, actorSub, email);
           return { ok: true };
-        } catch {
-          return { ok: false, error: "distribution_targets not available yet (migrations not applied)" };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
@@ -324,40 +234,13 @@ export function buildSetupAssistantTools(ctx: SetupAssistantContext): AssistantT
       },
       run: async (args) => {
         const a = (args ?? {}) as any;
-        const url = String(a.url ?? "").trim();
-        const enabled = typeof a.enabled === "boolean" ? a.enabled : true;
-
         try {
-          if (!url) {
-            const deleted = await db<{ id: string }[]>`
-              DELETE FROM distribution_targets
-              WHERE tenant_id = ${tenantId} AND kind = ${"teams_webhook"}
-              RETURNING id
-            `;
-            for (const row of deleted) {
-              await writeAudit(db, tenantId, "distribution_target.teams_webhook.cleared", actorSub, "distribution_target", row.id);
-            }
-            return { ok: true, cleared: true };
-          }
-
-          if (!isValidHttpUrl(url)) return { ok: false, error: "url must be http(s)" };
-
-          const id = randomUUID();
-          const rows = await db<{ id: string; inserted: boolean }[]>`
-            INSERT INTO distribution_targets (id, tenant_id, kind, label, value, enabled)
-            VALUES (${id}, ${tenantId}, ${"teams_webhook"}, ${"Teams"}, ${url}, ${enabled})
-            ON CONFLICT (tenant_id, kind)
-            DO UPDATE SET
-              value = EXCLUDED.value,
-              enabled = EXCLUDED.enabled,
-              updated_at = NOW()
-            RETURNING id, (xmax = 0) as inserted
-          `;
-          const saved = rows[0]!;
-          await writeAudit(db, tenantId, "distribution_target.teams_webhook.set", actorSub, "distribution_target", saved.id, { url, enabled });
-          return { ok: true, id: saved.id, inserted: saved.inserted };
-        } catch {
-          return { ok: false, error: "distribution_targets not available yet (migrations not applied)" };
+          const url = String(a.url ?? "");
+          const enabled = typeof a.enabled === "boolean" ? a.enabled : undefined;
+          const res = await setTeamsWebhook(db, tenantId, actorSub, { url, enabled });
+          return { ok: true, ...res };
+        } catch (err) {
+          return { ok: false, error: String((err as any)?.message ?? err) };
         }
       },
     },
