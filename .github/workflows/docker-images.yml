@@ -72,11 +72,38 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
-          curl -sS -X PATCH \
+          # NOTE: For personal accounts, use /user/...; for orgs, use /orgs/<org>/...
+          # We try /user first, then fall back to /orgs/<owner> for org-owned repos.
+          API_USER="https://api.github.com/user/packages/container/virtuasoc-factory/visibility"
+          API_ORG="https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/virtuasoc-factory/visibility"
+
+          attempt() {
+            local url="$1"
+            local code
+            code="$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/users/${{ github.repository_owner }}/packages/container/virtuasoc-factory/visibility" \
-            -d '{"visibility":"public"}'
+            "$url" \
+            -d '{"visibility":"public"}' || true)"
+            cat /tmp/resp.json || true
+            if [[ "$code" == "200" || "$code" == "201" || "$code" == "204" ]]; then
+              echo "Set virtuasoc-factory visibility to public via: $url"
+              return 0
+            fi
+            # If endpoint isn't found for this ownership type, try the other one.
+            if [[ "$code" == "404" ]]; then
+              return 2
+            fi
+            echo "Failed to set package visibility (HTTP $code) via: $url"
+            return 1
+          }
+
+          attempt "$API_USER" || rc=$?
+          if [[ "${rc:-0}" == "2" ]]; then
+            attempt "$API_ORG"
+          elif [[ "${rc:-0}" != "0" ]]; then
+            exit 1
+          fi
 
 
