@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Intelligence Product Factory (Next.js App)
 
-## Getting Started
+This app (`apps/factory/`) is the new **Intelligence Product Factory** SaaS UI + backend (Next.js App Router).
 
-First, run the development server:
+It is developed as part of **Autonomous Modular Delivery (AMD)**. See:
+- `docs/amd/README.md` (module roadmap + flags)
+
+## Feature flag
+The app is deployed but gated behind:
+- `FEATURE_FACTORY_APP=true`
+
+When disabled, the home page shows a “disabled” screen.
+
+## Local development (recommended)
+
+### 1) Start infra
+From repo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This starts:
+- Postgres (`localhost:5432`)
+- Redis (`localhost:6379`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2) Run control-plane migrations
+VirtuaSOC’s Fastify API currently owns SQL migrations for the control-plane tables (tenants + NextAuth + RBAC).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run once (from repo root):
 
-## Learn More
+```bash
+npm -w @virtuasoc/api run db:migrate:control
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3) Configure env
+Create a `.env` in repo root or set env vars for the factory process. Minimum required for Entra sign-in:
+- `FEATURE_FACTORY_APP=true`
+- `CONTROL_DATABASE_URL=postgres://postgres:postgres@localhost:5432/virtuasoc_control`
+- `TENANT_DSN_ENCRYPTION_KEY=...` (32 bytes base64/hex)
+- `NEXTAUTH_URL=http://localhost:3000`
+- `NEXTAUTH_SECRET=...`
+- `ENTRA_CLIENT_ID=...`
+- `ENTRA_CLIENT_SECRET=...`
+- `ENTRA_TENANT_ID=...`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See `config/env.example` for the full set.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4) Run the factory app
 
-## Deploy on Vercel
+```bash
+npm -w @virtuasoc/factory run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Open `http://localhost:3000`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Prisma notes
+This app uses **two Prisma schemas**:
+- `prisma/control/schema.prisma` (control-plane)
+- `prisma/tenant/schema.prisma` (tenant-plane)
+
+Generated clients are output under `apps/factory/src/generated/*` via:
+
+```bash
+npm -w @virtuasoc/factory run prisma:generate
+```
+
+In containers, Prisma clients are generated during build and copied into the runtime image.
+

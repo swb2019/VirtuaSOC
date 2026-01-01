@@ -13,6 +13,7 @@ This repo is designed for:
 - `apps/api`: SaaS API (control-plane + tenant routing, OIDC JWT verification, tenant onboarding)
 - `apps/worker`: background workers (ingest/draft/distribute) across tenants
 - `apps/web`: analyst web app (OIDC PKCE; `/api/*` backend)
+- `apps/factory`: **Intelligence Product Factory** app (Next.js App Router; AMD modules M0..Mn)
 - `packages/core`: contracts (schemas + fixtures + contract tests)
 - `packages/reporting`: ReportFactory + definitions + quality/eval harness
 - `integrations/*`: Teams/email/webhook distribution

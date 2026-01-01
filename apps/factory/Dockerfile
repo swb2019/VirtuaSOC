@@ -20,6 +20,8 @@ COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/factory/package.json ./apps/factory/package.json
 COPY --from=build /repo/apps/factory/.next ./apps/factory/.next
 COPY --from=build /repo/apps/factory/public ./apps/factory/public
+# Prisma client output is generated into the repo under apps/factory/src/generated/* (linux binaries in build stage).
+COPY --from=build /repo/apps/factory/src/generated ./apps/factory/src/generated
 
 EXPOSE 3000
 WORKDIR /repo/apps/factory
