@@ -28,11 +28,49 @@ model EvidenceItem {
   metadata     Json     @default("{}")
   triageStatus String   @default("new") @map("triage_status")
 
+  entityLinks EvidenceEntityLink[]
+
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
   @@index([tenantId, sourceUri])
   @@index([tenantId, contentHash])
   @@map("evidence_items")
+}
+
+model Entity {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  type        String
+  name        String
+  description String?
+  piiFlag     Boolean @default(false) @map("pii_flag")
+  metadata    Json    @default("{}")
+
+  links EvidenceEntityLink[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, type])
+  @@map("entities")
+}
+
+model EvidenceEntityLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  evidenceId String  @db.Uuid @map("evidence_id")
+  entityId   String  @db.Uuid @map("entity_id")
+  notes      String?
+
+  evidence EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  entity   Entity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, evidenceId, entityId])
+  @@index([tenantId, entityId, createdAt(sort: Desc)])
+  @@index([tenantId, evidenceId, createdAt(sort: Desc)])
+  @@map("evidence_entity_links")
 }
 
 model RssFeed {
