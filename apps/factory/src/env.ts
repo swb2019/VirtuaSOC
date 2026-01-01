@@ -28,6 +28,11 @@ const EnvSchema = z.object({
   ENTRA_CLIENT_ID: z.string().optional(),
   ENTRA_CLIENT_SECRET: z.string().optional(),
   ENTRA_TENANT_ID: z.string().optional(),
+
+  // Optional fallback: reuse Platform OIDC client (public PKCE) if ENTRA_* vars aren't set.
+  // These are already used by the VirtuaSOC web/admin UI and may exist in shared secrets.
+  PLATFORM_OIDC_ISSUER: z.string().optional(),
+  PLATFORM_OIDC_CLIENT_ID: z.string().optional(),
 });
 
 const parsed = EnvSchema.parse(process.env);
@@ -52,6 +57,9 @@ export const env = {
   entraClientId: parsed.ENTRA_CLIENT_ID ?? "",
   entraClientSecret: parsed.ENTRA_CLIENT_SECRET ?? "",
   entraTenantId: parsed.ENTRA_TENANT_ID ?? "",
+
+  platformOidcIssuer: parsed.PLATFORM_OIDC_ISSUER ?? "",
+  platformOidcClientId: parsed.PLATFORM_OIDC_CLIENT_ID ?? "",
 };
 
 export function requireEnv(name: string, value: string): string {
