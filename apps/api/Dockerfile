@@ -15,7 +15,10 @@ RUN npm ci
 
 # Build
 COPY . .
-RUN npm --workspaces run build
+# Build only what this image needs (avoid pulling in apps/factory build deps like Prisma/Next).
+RUN npm -w @virtuasoc/core run build \
+  && npm -w @virtuasoc/reporting run build \
+  && npm -w @virtuasoc/api run build
 RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runtime

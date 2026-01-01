@@ -13,7 +13,13 @@ COPY integrations/webhook/package.json integrations/webhook/package.json
 RUN npm ci
 
 COPY . .
-RUN npm --workspaces run build
+# Build only what this image needs (avoid pulling in apps/factory build deps like Prisma/Next).
+RUN npm -w @virtuasoc/core run build \
+  && npm -w @virtuasoc/reporting run build \
+  && npm -w @virtuasoc/integration-email run build \
+  && npm -w @virtuasoc/integration-teams run build \
+  && npm -w @virtuasoc/integration-webhook run build \
+  && npm -w @virtuasoc/worker run build
 RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runtime
