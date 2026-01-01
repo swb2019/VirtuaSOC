@@ -11,30 +11,66 @@ datasource db {
 /// Tenant-plane evidence. Even with DB-per-tenant, we keep tenantId for defense-in-depth.
 model EvidenceItem {
   id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @db.Uuid
-  createdAt DateTime @default(now())
-  fetchedAt DateTime
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  fetchedAt DateTime @db.Timestamptz @map("fetched_at")
 
-  sourceType   String
-  sourceUrl    String?
-  sourceMeta   Json     @default("{}")
+  sourceType String  @map("source_type")
+  sourceUri  String? @map("source_uri")
 
-  contentHash  String?
-  title        String?
-  excerpt      String?
-  contentText  String?
-  geo          Json?
+  contentHash String? @map("content_hash")
+  title       String?
+  summary     String?
+  contentText String? @map("content_text")
+  handling    String?
 
   tags         String[] @default([])
-  piiFlag      Boolean  @default(false)
-
-  // Tradecraft: triage separate from confidence/likelihood (stored on Products later).
-  triageStatus String   @default("new")
+  metadata     Json     @default("{}")
+  triageStatus String   @default("new") @map("triage_status")
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
-  @@index([tenantId, sourceUrl])
+  @@index([tenantId, sourceUri])
   @@index([tenantId, contentHash])
+  @@map("evidence_items")
+}
+
+model RssFeed {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  url       String
+  title     String?
+  enabled   Boolean  @default(true)
+
+  @@unique([tenantId, url])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("rss_feeds")
+}
+
+model IngestPrefs {
+  tenantId            String   @id @db.Uuid @map("tenant_id")
+  createdAt           DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt           DateTime @updatedAt @db.Timestamptz @map("updated_at")
+  rssDefaultTags      String[] @default([]) @map("rss_default_tags")
+  rssAutoTriageStatus String   @default("new") @map("rss_auto_triage_status")
+
+  @@map("ingest_prefs")
+}
+
+model DistributionTarget {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  kind    String
+  label   String?
+  value   String
+  enabled Boolean @default(true)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("distribution_targets")
 }
 
 

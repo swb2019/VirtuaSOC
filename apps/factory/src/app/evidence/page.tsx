@@ -1,0 +1,221 @@
+import { redirect } from "next/navigation";
+
+import { env } from "@/env";
+import { requireTenantDb } from "@/lib/tenantContext";
+import { computeEvidenceHash } from "@/lib/evidenceHash";
+
+export const runtime = "nodejs";
+
+function isHttpUrl(raw: string) {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export default async function EvidencePage() {
+  if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
+  if (!env.featureEvidenceIngest) {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-10 text-zinc-100">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+          <div className="text-lg font-semibold">Evidence</div>
+          <div className="mt-2 text-sm text-zinc-400">M2 (Evidence ingest) is not enabled yet.</div>
+          <div className="mt-6 rounded-xl border border-zinc-800 bg-black/30 p-4 text-xs text-zinc-300">
+            Set <code className="text-zinc-200">FEATURE_EVIDENCE_INGEST=true</code> to enable.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { tenant, tenantDb, membership } = await requireTenantDb("VIEWER");
+
+  const items = await tenantDb.evidenceItem.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  async function createManual(formData: FormData) {
+    "use server";
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
+
+    const sourceUriRaw = String(formData.get("sourceUri") ?? "").trim();
+    const sourceUri = sourceUriRaw ? sourceUriRaw : null;
+    if (sourceUri && !isHttpUrl(sourceUri)) throw new Error("sourceUri must be http(s)");
+
+    const title = String(formData.get("title") ?? "").trim() || null;
+    const summary = String(formData.get("summary") ?? "").trim() || null;
+    const contentText = String(formData.get("contentText") ?? "").trim() || null;
+
+    const tags = String(formData.get("tags") ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 30);
+
+    if (!title && !summary && !contentText) throw new Error("Provide at least one of title/summary/content");
+
+    const hash = computeEvidenceHash({ sourceUri, title, summary, contentText });
+    const fetchedAt = new Date();
+
+    // Dedupe: prefer URL match, then hash match.
+    const existing =
+      (sourceUri
+        ? await tenantDb.evidenceItem.findFirst({ where: { tenantId: tenant.id, sourceUri } })
+        : null) ??
+      (hash
+        ? await tenantDb.evidenceItem.findFirst({ where: { tenantId: tenant.id, contentHash: hash } })
+        : null);
+
+    if (existing) {
+      await tenantDb.evidenceItem.update({
+        where: { id: existing.id },
+        data: {
+          fetchedAt,
+          title: title ?? existing.title,
+          summary: summary ?? existing.summary,
+          contentText: contentText ?? existing.contentText,
+          tags: Array.from(new Set([...(existing.tags ?? []), ...tags])),
+          sourceType: "manual",
+        },
+      });
+      redirect("/evidence");
+    }
+
+    await tenantDb.evidenceItem.create({
+      data: {
+        tenantId: tenant.id,
+        fetchedAt,
+        sourceType: "manual",
+        sourceUri,
+        title,
+        summary,
+        contentText,
+        contentHash: hash,
+        tags,
+        metadata: { createdBy: membership.userId, channel: "manual" },
+        triageStatus: "new",
+        handling: "internal",
+      },
+    });
+
+    redirect("/evidence");
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-10 text-zinc-100">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xl font-semibold">Evidence</div>
+          <div className="mt-1 text-sm text-zinc-400">
+            Tenant <span className="font-mono text-zinc-200">{tenant.slug}</span> • Role{" "}
+            <span className="font-semibold">{membership.role}</span>
+          </div>
+        </div>
+        <a
+          href="/tenants"
+          className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+        >
+          Switch tenant
+        </a>
+      </div>
+
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="text-sm font-semibold text-zinc-200">Manual entry</div>
+        <div className="mt-1 text-xs text-zinc-500">Creates evidence and dedupes by URL and content hash.</div>
+
+        <form action={createManual} className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-zinc-400">Source URL (optional)</label>
+            <input
+              name="sourceUri"
+              placeholder="https://example.com/article"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Title (optional)</label>
+            <input
+              name="title"
+              placeholder="Short title…"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Tags (comma-separated)</label>
+            <input
+              name="tags"
+              placeholder="e.g. cisa, healthcare, vendor"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Summary (optional)</label>
+            <textarea
+              name="summary"
+              rows={4}
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Content (optional)</label>
+            <textarea
+              name="contentText"
+              rows={4}
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+              Create
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-zinc-800">
+        <table className="w-full text-sm">
+          <thead className="bg-black/40 text-left text-zinc-300">
+            <tr>
+              <th className="px-4 py-3">Title</th>
+              <th className="px-4 py-3">Source</th>
+              <th className="px-4 py-3">Triage</th>
+              <th className="px-4 py-3">Fetched</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+            {items.map((e) => (
+              <tr key={e.id} className="hover:bg-zinc-900/40">
+                <td className="px-4 py-3 font-semibold text-zinc-100">{e.title ?? e.id}</td>
+                <td className="px-4 py-3">
+                  {e.sourceUri ? (
+                    <a className="text-sky-300 hover:underline" href={e.sourceUri} target="_blank" rel="noreferrer">
+                      link
+                    </a>
+                  ) : (
+                    <span className="text-zinc-500">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-zinc-300">{e.triageStatus}</td>
+                <td className="px-4 py-3 text-zinc-400">{new Date(e.fetchedAt).toLocaleString()}</td>
+              </tr>
+            ))}
+            {!items.length ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-zinc-400">
+                  No evidence yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+
