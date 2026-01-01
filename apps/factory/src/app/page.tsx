@@ -1,5 +1,8 @@
 import { env } from "@/env";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   const enabled = env.featureFactoryApp;
 
