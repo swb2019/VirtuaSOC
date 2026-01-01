@@ -40,6 +40,8 @@ The assistant is intentionally constrained to safe configuration operations:
 All changes are written through an allowlisted tool set and recorded in the tenant audit log.
 
 ## 4) Notes / safety
-- The assistant is designed to operate on **setup/configuration** only.\n+- Don’t paste sensitive information unless you intend for it to be stored (e.g., Teams webhook URL).\n+- If you hit the daily cap, the API returns HTTP `429` with `Retry-After`.
+- The assistant is designed to operate on **setup/configuration** only.
+- Don’t paste sensitive information unless you intend for it to be stored (e.g., Teams webhook URL).
+- If you hit the daily cap, the API returns HTTP `429` with `Retry-After`.
 
 
