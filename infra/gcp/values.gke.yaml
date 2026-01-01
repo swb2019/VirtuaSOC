@@ -10,6 +10,9 @@ image:
   web:
     repository: ghcr.io/swb2019/virtuasoc-web
     tag: latest
+  factory:
+    repository: ghcr.io/swb2019/virtuasoc-factory
+    tag: latest
 
 ingress:
   enabled: true
@@ -31,12 +34,30 @@ ingress:
         - path: /
           pathType: Prefix
           service: web
+    - host: "factory.app.virtuasoc.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: factory
   # TLS is enabled once cert-manager has issued the wildcard certificate into this secret.
   tls:
     - secretName: virtuasoc-tls
       hosts:
         - "app.virtuasoc.com"
         - "*.app.virtuasoc.com"
+        - "factory.app.virtuasoc.com"
+
+env:
+  featureFactoryApp: "true"
+  featureRbac: "true"
+  featureEvidenceIngest: "true"
+  featureEntityLinking: "true"
+  featureSignals: "true"
+  featureProductFactory: "true"
+  featureReviewDistribution: "true"
+
+factory:
+  enabled: true
 
 secrets:
   # We create the Kubernetes secret out-of-band (kubectl create secret ...) so secrets never live in git.

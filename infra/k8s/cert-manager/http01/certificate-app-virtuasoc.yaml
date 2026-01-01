@@ -10,5 +10,6 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - app.virtuasoc.com
+    - factory.app.virtuasoc.com
 
 

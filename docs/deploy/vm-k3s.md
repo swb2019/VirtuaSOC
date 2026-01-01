@@ -14,7 +14,10 @@ with:
 ## 0) Assumptions
 - GCP project: `virtuasoc`
 - Region/zone: `us-east1` / `us-east1-b`
-- Domain: `app.virtuasoc.com` (tenant selection via `X-Tenant-Slug` for now)
+- Domains:
+  - `app.virtuasoc.com` (existing VirtuaSOC web + API)
+  - `factory.app.virtuasoc.com` (Intelligence Product Factory app)
+  - Tenant selection: `X-Tenant-Slug` (API) and cookie-based selection (Factory) for now
 
 ## 1) Create VM + firewall (example)
 Pick a VM size that can run Postgres + Redis + 3 app pods:
@@ -204,6 +207,43 @@ VirtuaSOC includes a **Local admin (break-glass)** login in the web UI when `AUT
 - Go to `https://app.virtuasoc.com`
 - Click **Local admin (break-glass)**
 - Paste the `PLATFORM_ADMIN_KEY`
+
+## 8) Enable the Factory app (M0–M6)
+### DNS
+Point `factory.app.virtuasoc.com` to the same ingress load balancer IP as `app.virtuasoc.com`.
+
+### Secrets (Kubernetes Secret)
+The Factory app uses NextAuth + Microsoft Entra ID. Add these keys to `virtuasoc-secrets`:
+- `NEXTAUTH_URL` (set to `https://factory.app.virtuasoc.com`)
+- `NEXTAUTH_SECRET`
+- `ENTRA_CLIENT_ID`
+- `ENTRA_CLIENT_SECRET`
+- `ENTRA_TENANT_ID`
+
+Optional (for real product generation in the worker):
+- `LLM_PROVIDER=openai`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (default: `gpt-5.2`)
+
+### Helm values
+Use `infra/gcp/values.k3s.yaml` (updated) which:
+- deploys the `factory` service
+- routes `factory.app.virtuasoc.com` to it
+- enables feature flags for M1–M6
+
+Deploy:
+
+```bash
+helm upgrade --install virtuasoc infra/k8s/helm/virtuasoc \
+  --namespace virtuasoc \
+  -f infra/gcp/values.k3s.yaml
+```
+
+### Smoke test (Factory)
+- Visit `https://factory.app.virtuasoc.com`
+- Sign in via Entra
+- Choose tenant
+- Go to `/products` → seed defaults → generate → approve → generate PDF → distribute
 
 When you configure enterprise OIDC:
 - configure platform operator OIDC (for `/admin`) and redeploy

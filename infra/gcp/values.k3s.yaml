@@ -10,6 +10,9 @@ image:
   web:
     repository: ghcr.io/swb2019/virtuasoc-web
     tag: latest
+  factory:
+    repository: ghcr.io/swb2019/virtuasoc-factory
+    tag: latest
 
 # When using tag=latest, prefer Always. For pinned SHA tags, use IfNotPresent.
 imagePullPolicy: Always
@@ -26,14 +29,30 @@ ingress:
         - path: /
           pathType: Prefix
           service: web
+    - host: "factory.app.virtuasoc.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: factory
   tls:
     - secretName: virtuasoc-tls
       hosts:
         - "app.virtuasoc.com"
+        - "factory.app.virtuasoc.com"
 
 env:
   # Production: enterprise OIDC enabled (tenant OIDC config is stored in the control-plane DB).
   authMode: oidc
+  featureFactoryApp: "true"
+  featureRbac: "true"
+  featureEvidenceIngest: "true"
+  featureEntityLinking: "true"
+  featureSignals: "true"
+  featureProductFactory: "true"
+  featureReviewDistribution: "true"
+
+factory:
+  enabled: true
 
 secrets:
   # Create the Kubernetes secret out-of-band (or via Infisical/ESO), not in git.
