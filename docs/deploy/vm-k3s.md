@@ -108,6 +108,14 @@ Required keys:
 - `PLATFORM_ADMIN_KEY` (random string; **break-glass** for `/api/admin/*` if platform OIDC is down)
 - `JWT_SECRET` (for `AUTH_MODE=local` only)
 
+AI Setup Assistant (optional):
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (default: `gpt-5.2`)
+- `AI_SETUP_ENABLED` (set `true` to enable `/setup`)
+- `AI_SETUP_MAX_TOOL_CALLS` (default: `5`)
+- `AI_SETUP_MAX_OUTPUT_TOKENS` (default: `600`)
+- `AI_SETUP_MAX_REQUESTS_PER_TENANT_PER_DAY` (default: `50`)
+
 Recommended (platform operator OIDC for `/admin` and `/api/admin/*`):
 - `PLATFORM_OIDC_ISSUER`
 - `PLATFORM_OIDC_CLIENT_ID`
