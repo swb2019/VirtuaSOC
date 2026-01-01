@@ -36,6 +36,8 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
     // Ignore (migrations may not be applied yet).
   }
 
+  const insertedEvidenceIds: string[] = [];
+
   for (const item of feed.items ?? []) {
     const link = item.link ?? item.guid ?? undefined;
     const title = item.title ?? undefined;
@@ -48,12 +50,13 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
 
     // Dedup by (tenant_id, source_uri) unique index
     if (link) {
+      const id = randomUUID();
       try {
-        await db`
+        const rows = await db<{ id: string }[]>`
           INSERT INTO evidence_items (
             id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags, triage_status
           ) VALUES (
-            ${randomUUID()},
+            ${id},
             ${payload.tenantId},
             ${fetchedAt},
             ${"rss"},
@@ -66,36 +69,49 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
             ${autoTriage}
           )
           ON CONFLICT (tenant_id, source_uri) DO NOTHING
+          RETURNING id
         `;
+        if (rows.length) insertedEvidenceIds.push(id);
       } catch (err) {
         // Backwards compatibility: tenant DB may not have triage_status yet.
         const msg = String((err as any)?.message ?? err);
+        // Dedupe by content hash: ignore unique constraint violations.
+        if (msg.includes("idx_evidence_unique_content_hash")) continue;
         if (!msg.includes("triage_status")) throw err;
-        await db`
-          INSERT INTO evidence_items (
-            id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags
-          ) VALUES (
-            ${randomUUID()},
-            ${payload.tenantId},
-            ${fetchedAt},
-            ${"rss"},
-            ${link},
-            ${title},
-            ${summary},
-            ${content},
-            ${hash},
-            ${db.array(defaultTags, 1009)}
-          )
-          ON CONFLICT (tenant_id, source_uri) DO NOTHING
-        `;
+        try {
+          const rows = await db<{ id: string }[]>`
+            INSERT INTO evidence_items (
+              id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags
+            ) VALUES (
+              ${id},
+              ${payload.tenantId},
+              ${fetchedAt},
+              ${"rss"},
+              ${link},
+              ${title},
+              ${summary},
+              ${content},
+              ${hash},
+              ${db.array(defaultTags, 1009)}
+            )
+            ON CONFLICT (tenant_id, source_uri) DO NOTHING
+            RETURNING id
+          `;
+          if (rows.length) insertedEvidenceIds.push(id);
+        } catch (err2) {
+          const msg2 = String((err2 as any)?.message ?? err2);
+          if (msg2.includes("idx_evidence_unique_content_hash")) continue;
+          throw err2;
+        }
       }
     } else {
       try {
-        await db`
+        const id = randomUUID();
+        const rows = await db<{ id: string }[]>`
           INSERT INTO evidence_items (
             id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags, triage_status
           ) VALUES (
-            ${randomUUID()},
+            ${id},
             ${payload.tenantId},
             ${fetchedAt},
             ${"rss"},
@@ -106,26 +122,40 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
             ${db.array(defaultTags, 1009)},
             ${autoTriage}
           )
+          RETURNING id
         `;
+        if (rows.length) insertedEvidenceIds.push(id);
       } catch (err) {
         const msg = String((err as any)?.message ?? err);
+        if (msg.includes("idx_evidence_unique_content_hash")) continue;
         if (!msg.includes("triage_status")) throw err;
-        await db`
-          INSERT INTO evidence_items (
-            id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags
-          ) VALUES (
-            ${randomUUID()},
-            ${payload.tenantId},
-            ${fetchedAt},
-            ${"rss"},
-            ${title},
-            ${summary},
-            ${content},
-            ${hash},
-            ${db.array(defaultTags, 1009)}
-          )
-        `;
+        const id = randomUUID();
+        try {
+          const rows = await db<{ id: string }[]>`
+            INSERT INTO evidence_items (
+              id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags
+            ) VALUES (
+              ${id},
+              ${payload.tenantId},
+              ${fetchedAt},
+              ${"rss"},
+              ${title},
+              ${summary},
+              ${content},
+              ${hash},
+              ${db.array(defaultTags, 1009)}
+            )
+            RETURNING id
+          `;
+          if (rows.length) insertedEvidenceIds.push(id);
+        } catch (err2) {
+          const msg2 = String((err2 as any)?.message ?? err2);
+          if (msg2.includes("idx_evidence_unique_content_hash")) continue;
+          throw err2;
+        }
       }
     }
   }
+
+  return insertedEvidenceIds;
 }
