@@ -28,15 +28,7 @@ spec:
               service:
                 name: {{ include "virtuasoc.fullname" $ }}-{{ .service }}
                 port:
-                  number: {{- if eq .service "api" -}}
-                    {{ $.Values.service.apiPort }}
-                    {{- else if eq .service "web" -}}
-                    {{ $.Values.service.webPort }}
-                    {{- else if eq .service "factory" -}}
-                    {{ $.Values.service.factoryPort }}
-                    {{- else -}}
-                    {{ $.Values.service.webPort }}
-                    {{- end }}
+                  number: {{ if eq .service "api" }}{{ $.Values.service.apiPort }}{{ else if eq .service "web" }}{{ $.Values.service.webPort }}{{ else if eq .service "factory" }}{{ $.Values.service.factoryPort }}{{ else }}{{ $.Values.service.webPort }}{{ end }}
           {{- end }}
     {{- end }}
 {{- end -}}
