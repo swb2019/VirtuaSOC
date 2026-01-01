@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
 import { computeEvidenceHash } from "@/lib/evidenceHash";
+import { getIngestQueue, JOB_SIGNALS_EVALUATE } from "@/lib/queue";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function isHttpUrl(raw: string) {
   try {
@@ -37,6 +39,12 @@ export default async function EvidencePage() {
     where: { tenantId: tenant.id },
     orderBy: { createdAt: "desc" },
     take: 50,
+  });
+
+  const feeds = await tenantDb.rssFeed.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
   });
 
   async function createManual(formData: FormData) {
@@ -83,10 +91,16 @@ export default async function EvidencePage() {
           sourceType: "manual",
         },
       });
+      // Trigger signal evaluation (idempotent on the worker side).
+      await getIngestQueue().add(
+        JOB_SIGNALS_EVALUATE,
+        { tenantId: tenant.id, evidenceId: existing.id },
+        { jobId: `sig:${tenant.id}:${existing.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      );
       redirect("/evidence");
     }
 
-    await tenantDb.evidenceItem.create({
+    const created = await tenantDb.evidenceItem.create({
       data: {
         tenantId: tenant.id,
         fetchedAt,
@@ -103,6 +117,54 @@ export default async function EvidencePage() {
       },
     });
 
+    await getIngestQueue().add(
+      JOB_SIGNALS_EVALUATE,
+      { tenantId: tenant.id, evidenceId: created.id },
+      { jobId: `sig:${tenant.id}:${created.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+
+    redirect("/evidence");
+  }
+
+  async function upsertRssFeed(formData: FormData) {
+    "use server";
+    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const url = String(formData.get("url") ?? "").trim();
+    const title = String(formData.get("title") ?? "").trim() || null;
+    if (!url) throw new Error("url is required");
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("url must be http(s)");
+    } catch {
+      throw new Error("url must be http(s)");
+    }
+
+    await tenantDb.rssFeed.upsert({
+      where: { tenantId_url: { tenantId: tenant.id, url } },
+      create: { tenantId: tenant.id, url, title, enabled: true },
+      update: { title, enabled: true },
+    });
+
+    redirect("/evidence");
+  }
+
+  async function toggleRssFeed(formData: FormData) {
+    "use server";
+    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const id = String(formData.get("id") ?? "").trim();
+    const enabledRaw = String(formData.get("enabled") ?? "").trim().toLowerCase();
+    const enabled = enabledRaw === "true";
+    if (!id) throw new Error("id is required");
+    await tenantDb.rssFeed.update({ where: { id }, data: { enabled } });
+    redirect("/evidence");
+  }
+
+  async function deleteRssFeed(formData: FormData) {
+    "use server";
+    const { tenantDb } = await requireTenantDb("ANALYST");
+    const id = String(formData.get("id") ?? "").trim();
+    if (!id) throw new Error("id is required");
+    await tenantDb.rssFeed.delete({ where: { id } });
     redirect("/evidence");
   }
 
@@ -175,6 +237,93 @@ export default async function EvidencePage() {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zinc-200">RSS feeds</div>
+            <div className="mt-1 text-xs text-zinc-500">
+              Worker ingests enabled feeds every ~15 minutes (default CISA feeds are used if none are configured).
+            </div>
+          </div>
+          <a
+            href="/admin/members"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Tenant admin
+          </a>
+        </div>
+
+        <form action={upsertRssFeed} className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-zinc-400">Feed URL</label>
+            <input
+              name="url"
+              placeholder="https://example.com/feed.xml"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Title (optional)</label>
+            <input
+              name="title"
+              placeholder="Label…"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div className="md:col-span-3 flex justify-end">
+            <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+              Add / Enable
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6 overflow-hidden rounded-xl border border-zinc-800">
+          <table className="w-full text-sm">
+            <thead className="bg-black/40 text-left text-zinc-300">
+              <tr>
+                <th className="px-4 py-3">URL</th>
+                <th className="px-4 py-3">Title</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+              {feeds.map((f) => (
+                <tr key={f.id}>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-200">{f.url}</td>
+                  <td className="px-4 py-3 text-zinc-300">{f.title ?? "—"}</td>
+                  <td className="px-4 py-3 text-zinc-300">{f.enabled ? "enabled" : "disabled"}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <form action={toggleRssFeed}>
+                        <input type="hidden" name="id" value={f.id} />
+                        <input type="hidden" name="enabled" value={String(!f.enabled)} />
+                        <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
+                          {f.enabled ? "Disable" : "Enable"}
+                        </button>
+                      </form>
+                      <form action={deleteRssFeed}>
+                        <input type="hidden" name="id" value={f.id} />
+                        <button className="rounded-lg border border-rose-900/50 bg-rose-950/30 px-3 py-2 text-xs font-semibold text-rose-200 hover:border-rose-900">
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!feeds.length ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-zinc-400">
+                    No RSS feeds configured in the tenant DB.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-zinc-800">
