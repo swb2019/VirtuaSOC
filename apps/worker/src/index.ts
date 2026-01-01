@@ -7,9 +7,12 @@ import { createDb, type Db } from "./db.js";
 import { ingestRssFeed, type IngestRssJobPayload } from "./ingest/rss.js";
 import { runRetentionCleanup, type RetentionCleanupJobPayload } from "./maintenance/retentionCleanup.js";
 import { JOBS, QUEUES } from "./queues.js";
+import { evaluateSignal, type EvaluateSignalJobPayload } from "./signals/evaluateSignal.js";
 import { getTenantDbDsn, listTenants } from "./tenancy/controlPlane.js";
 import { runAutoSitrep, type AutoSitrepJobPayload } from "./reports/autoSitrep.js";
 import { distributeReport, type DistributeReportJobPayload } from "./reports/distributeReport.js";
+import { generateProduct, type GenerateProductJobPayload } from "./products/generateProduct.js";
+import { distributeProduct, type DistributeProductJobPayload } from "./products/distributeProduct.js";
 
 const DEFAULT_RSS_FEEDS = [
   "https://www.cisa.gov/uscert/ncas/alerts.xml",
@@ -124,7 +127,15 @@ async function main() {
       if (job.name === JOBS.ingestRss) {
         const payload = job.data as IngestRssJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
-        await ingestRssFeed(tenantDb, payload);
+        const inserted = await ingestRssFeed(tenantDb, payload);
+        // Trigger signal evaluation for newly inserted evidence.
+        for (const evidenceId of inserted) {
+          await ingestQueue.add(
+            JOBS.evaluateSignal,
+            { tenantId: payload.tenantId, evidenceId } satisfies EvaluateSignalJobPayload,
+            { jobId: `sig:${payload.tenantId}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+          );
+        }
         return;
       }
       if (job.name === JOBS.retentionCleanup) {
@@ -143,6 +154,24 @@ async function main() {
         const payload = job.data as DistributeReportJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
         await distributeReport(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.evaluateSignal) {
+        const payload = job.data as EvaluateSignalJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await evaluateSignal(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.generateProduct) {
+        const payload = job.data as GenerateProductJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await generateProduct(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.distributeProduct) {
+        const payload = job.data as DistributeProductJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await distributeProduct(tenantDb, payload);
         return;
       }
     },

@@ -5,6 +5,7 @@ import { requireTenantDb } from "@/lib/tenantContext";
 import { ENTITY_TYPES, normalizeEntityType } from "@/lib/entities";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function EntitiesPage() {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
@@ -32,14 +33,14 @@ export default async function EntitiesPage() {
 
   async function createEntity(formData: FormData) {
     "use server";
-    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const type = normalizeEntityType(formData.get("type"));
     const name = String(formData.get("name") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim() || null;
     if (!type) throw new Error("Invalid type");
     if (!name) throw new Error("Name is required");
 
-    await tenantDb.entity.create({
+    const created = await tenantDb.entity.create({
       data: {
         tenantId: tenant.id,
         type,
@@ -47,6 +48,16 @@ export default async function EntitiesPage() {
         description,
         piiFlag: type === "PERSON",
         metadata: {},
+      },
+    });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "entity.created",
+        actorUserId: membership.userId,
+        targetType: "entity",
+        targetId: created.id,
+        metadata: { type, name, piiFlag: created.piiFlag },
       },
     });
 

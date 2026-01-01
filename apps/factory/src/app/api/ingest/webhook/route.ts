@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
 import { computeEvidenceHash } from "@/lib/evidenceHash";
+import { getIngestQueue, JOB_SIGNALS_EVALUATE } from "@/lib/queue";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,21 @@ export async function POST(req: Request) {
         },
       },
     });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "evidence.ingested.webhook",
+        actorUserId: membership.userId,
+        targetType: "evidence",
+        targetId: updated.id,
+        metadata: { inserted: false, sourceUri },
+      },
+    });
+    await getIngestQueue().add(
+      JOB_SIGNALS_EVALUATE,
+      { tenantId: tenant.id, evidenceId: updated.id },
+      { jobId: `sig:${tenant.id}:${updated.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
     return NextResponse.json({ ok: true, id: updated.id, inserted: false });
   }
 
@@ -92,6 +108,22 @@ export async function POST(req: Request) {
       handling: "internal",
     },
   });
+  await tenantDb.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      action: "evidence.ingested.webhook",
+      actorUserId: membership.userId,
+      targetType: "evidence",
+      targetId: created.id,
+      metadata: { inserted: true, sourceUri },
+    },
+  });
+
+  await getIngestQueue().add(
+    JOB_SIGNALS_EVALUATE,
+    { tenantId: tenant.id, evidenceId: created.id },
+    { jobId: `sig:${tenant.id}:${created.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+  );
 
   return NextResponse.json({ ok: true, id: created.id, inserted: true }, { status: 201 });
 }

@@ -19,6 +19,13 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS runtime
 WORKDIR /repo
 ENV NODE_ENV=production
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 USER node
 
 COPY --from=build /repo/node_modules ./node_modules

@@ -7,4 +7,7 @@ export const JOBS = {
   retentionCleanup: "maintenance.retention_cleanup",
   autoSitrep: "reports.auto_sitrep",
   distributeReport: "reports.distribute",
+  evaluateSignal: "signals.evaluate",
+  generateProduct: "products.generate",
+  distributeProduct: "products.distribute",
 } as const;

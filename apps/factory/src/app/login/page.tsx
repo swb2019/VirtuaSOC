@@ -6,7 +6,7 @@ import { env } from "@/env";
 import { LoginClient } from "./LoginClient";
 
 export default async function LoginPage() {
-  if (!env.featureFactoryApp) redirect("/");
+  if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
 
   const session = await getServerSession(getAuthOptions());
   if (session?.user?.id) redirect("/");

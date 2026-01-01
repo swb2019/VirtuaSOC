@@ -80,7 +80,7 @@ export default async function EvidencePage() {
         : null);
 
     if (existing) {
-      await tenantDb.evidenceItem.update({
+      const updated = await tenantDb.evidenceItem.update({
         where: { id: existing.id },
         data: {
           fetchedAt,
@@ -89,6 +89,19 @@ export default async function EvidencePage() {
           contentText: contentText ?? existing.contentText,
           tags: Array.from(new Set([...(existing.tags ?? []), ...tags])),
           sourceType: "manual",
+        },
+      });
+      await tenantDb.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          action: "evidence.updated.manual",
+          actorUserId: membership.userId,
+          targetType: "evidence",
+          targetId: updated.id,
+          metadata: {
+            sourceUri,
+            mergedTagsCount: updated.tags?.length ?? 0,
+          },
         },
       });
       // Trigger signal evaluation (idempotent on the worker side).
@@ -116,6 +129,19 @@ export default async function EvidencePage() {
         handling: "internal",
       },
     });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "evidence.created.manual",
+        actorUserId: membership.userId,
+        targetType: "evidence",
+        targetId: created.id,
+        metadata: {
+          sourceUri,
+          tagsCount: tags.length,
+        },
+      },
+    });
 
     await getIngestQueue().add(
       JOB_SIGNALS_EVALUATE,
@@ -128,7 +154,7 @@ export default async function EvidencePage() {
 
   async function upsertRssFeed(formData: FormData) {
     "use server";
-    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const url = String(formData.get("url") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim() || null;
     if (!url) throw new Error("url is required");
@@ -139,10 +165,20 @@ export default async function EvidencePage() {
       throw new Error("url must be http(s)");
     }
 
-    await tenantDb.rssFeed.upsert({
+    const feed = await tenantDb.rssFeed.upsert({
       where: { tenantId_url: { tenantId: tenant.id, url } },
       create: { tenantId: tenant.id, url, title, enabled: true },
       update: { title, enabled: true },
+    });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "rss_feed.upsert",
+        actorUserId: membership.userId,
+        targetType: "rss_feed",
+        targetId: feed.id,
+        metadata: { url, title, enabled: true },
+      },
     });
 
     redirect("/evidence");
@@ -150,21 +186,41 @@ export default async function EvidencePage() {
 
   async function toggleRssFeed(formData: FormData) {
     "use server";
-    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const id = String(formData.get("id") ?? "").trim();
     const enabledRaw = String(formData.get("enabled") ?? "").trim().toLowerCase();
     const enabled = enabledRaw === "true";
     if (!id) throw new Error("id is required");
-    await tenantDb.rssFeed.update({ where: { id }, data: { enabled } });
+    const feed = await tenantDb.rssFeed.update({ where: { id }, data: { enabled } });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "rss_feed.toggled",
+        actorUserId: membership.userId,
+        targetType: "rss_feed",
+        targetId: feed.id,
+        metadata: { enabled },
+      },
+    });
     redirect("/evidence");
   }
 
   async function deleteRssFeed(formData: FormData) {
     "use server";
-    const { tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const id = String(formData.get("id") ?? "").trim();
     if (!id) throw new Error("id is required");
-    await tenantDb.rssFeed.delete({ where: { id } });
+    const feed = await tenantDb.rssFeed.delete({ where: { id } });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "rss_feed.deleted",
+        actorUserId: membership.userId,
+        targetType: "rss_feed",
+        targetId: feed.id,
+        metadata: { url: feed.url },
+      },
+    });
     redirect("/evidence");
   }
 

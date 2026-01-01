@@ -4,6 +4,7 @@ import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function EntityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
@@ -51,7 +52,7 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
 
   async function linkEvidence(formData: FormData) {
     "use server";
-    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const evidenceId = String(formData.get("evidenceId") ?? "").trim();
     const notes = String(formData.get("notes") ?? "").trim() || null;
     if (!evidenceId) throw new Error("evidenceId is required");
@@ -68,12 +69,22 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
       where: { tenantId: tenant.id, entityId: entityRow.id, evidenceId: ev.id },
     });
     if (!existing) {
-      await tenantDb.evidenceEntityLink.create({
+      const link = await tenantDb.evidenceEntityLink.create({
         data: {
           tenantId: tenant.id,
           entityId: entityRow.id,
           evidenceId: ev.id,
           notes,
+        },
+      });
+      await tenantDb.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          action: "evidence.linked_to_entity",
+          actorUserId: membership.userId,
+          targetType: "evidence_entity_link",
+          targetId: link.id,
+          metadata: { entityId: entityRow.id, evidenceId: ev.id },
         },
       });
     }
@@ -83,12 +94,22 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
 
   async function unlinkEvidence(formData: FormData) {
     "use server";
-    const { tenant, tenantDb } = await requireTenantDb("ANALYST");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     const linkId = String(formData.get("linkId") ?? "").trim();
     if (!linkId) throw new Error("linkId is required");
     const row = await tenantDb.evidenceEntityLink.findFirst({ where: { tenantId: tenant.id, id: linkId } });
     if (!row) throw new Error("Not found");
     await tenantDb.evidenceEntityLink.delete({ where: { id: row.id } });
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "evidence.unlinked_from_entity",
+        actorUserId: membership.userId,
+        targetType: "evidence_entity_link",
+        targetId: row.id,
+        metadata: { entityId: row.entityId, evidenceId: row.evidenceId },
+      },
+    });
     redirect(`/entities/${encodeURIComponent(entityId)}`);
   }
 

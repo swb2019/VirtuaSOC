@@ -9,7 +9,9 @@ import { env } from "@/env";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  if (!env.featureFactoryApp) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!env.featureFactoryApp || !env.featureRbac) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const session = await getServerSession(getAuthOptions());
   const userId = session?.user?.id;

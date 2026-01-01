@@ -15,7 +15,7 @@ const rank: Record<TenantRole, number> = {
 };
 
 export async function requireTenantContext(minRole: TenantRole = "VIEWER") {
-  if (!env.featureFactoryApp) redirect("/");
+  if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
 
   const session = await getServerSession(getAuthOptions());
   const userId = session?.user?.id;

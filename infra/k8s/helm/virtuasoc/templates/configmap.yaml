@@ -12,5 +12,11 @@ data:
   REDACT_PII_ON_DISTRIBUTION: {{ .Values.env.redactPiiOnDistribution | quote }}
   DATA_RETENTION_DAYS: {{ .Values.env.dataRetentionDays | quote }}
   FEATURE_FACTORY_APP: {{ .Values.env.featureFactoryApp | quote }}
+  FEATURE_RBAC: {{ .Values.env.featureRbac | quote }}
+  FEATURE_EVIDENCE_INGEST: {{ .Values.env.featureEvidenceIngest | quote }}
+  FEATURE_ENTITY_LINKING: {{ .Values.env.featureEntityLinking | quote }}
+  FEATURE_SIGNALS: {{ .Values.env.featureSignals | quote }}
+  FEATURE_PRODUCT_FACTORY: {{ .Values.env.featureProductFactory | quote }}
+  FEATURE_REVIEW_DISTRIBUTION: {{ .Values.env.featureReviewDistribution | quote }}
 
 

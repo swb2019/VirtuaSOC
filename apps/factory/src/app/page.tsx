@@ -1,5 +1,7 @@
+import { env } from "@/env";
+
 export default function Home() {
-  const enabled = process.env.FEATURE_FACTORY_APP === "true";
+  const enabled = env.featureFactoryApp;
 
   if (!enabled) {
     return (
@@ -17,26 +19,44 @@ export default function Home() {
     );
   }
 
+  if (!env.featureRbac) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 text-zinc-100">
+        <div className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+          <div className="text-lg font-semibold">Intelligence Product Factory</div>
+          <div className="mt-2 text-sm text-zinc-400">
+            M1 (Auth + tenancy + RBAC) is not enabled yet.
+          </div>
+          <div className="mt-6 rounded-xl border border-zinc-800 bg-black/30 p-4 text-xs text-zinc-300">
+            Set <code className="text-zinc-200">FEATURE_RBAC=true</code> to enable sign-in + tenant selection.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // M1: if enabled, render a minimal authenticated entry point.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 text-zinc-100">
-      <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
+    <div className="mx-auto max-w-5xl space-y-6 px-6 py-10">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
         <div className="text-lg font-semibold">Intelligence Product Factory</div>
         <div className="mt-2 text-sm text-zinc-400">
-          M0 scaffold is live. Next: Auth + tenancy + RBAC (Entra SSO).
+          Auth + tenancy is now wired via NextAuth (Entra).
         </div>
-        <div className="mt-6 grid gap-3 text-sm">
-          <div className="rounded-xl border border-zinc-800 bg-black/30 p-4">
-            <div className="font-semibold text-zinc-200">Status</div>
-            <div className="mt-1 text-zinc-400">
-              This is the new Next.js app that will replace the legacy Vite UI over time.
-            </div>
-          </div>
-          <div className="rounded-xl border border-zinc-800 bg-black/30 p-4">
-            <div className="font-semibold text-zinc-200">Feature flags</div>
-            <div className="mt-1 text-zinc-400">
-              Modules are shipped behind flags (AMD). Current: <code>FEATURE_FACTORY_APP</code>.
-            </div>
-          </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/login"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            Sign in
+          </a>
+          <a
+            href="/tenants"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Choose tenant
+          </a>
         </div>
       </div>
     </div>

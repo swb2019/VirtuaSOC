@@ -29,6 +29,7 @@ model EvidenceItem {
   triageStatus String   @default("new") @map("triage_status")
 
   entityLinks EvidenceEntityLink[]
+  signalLinks SignalEvidenceLink[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
@@ -50,6 +51,7 @@ model Entity {
   metadata    Json    @default("{}")
 
   links EvidenceEntityLink[]
+  signalLinks SignalEntityLink[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, type])
@@ -71,6 +73,59 @@ model EvidenceEntityLink {
   @@index([tenantId, entityId, createdAt(sort: Desc)])
   @@index([tenantId, evidenceId, createdAt(sort: Desc)])
   @@map("evidence_entity_links")
+}
+
+model Signal {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  kind     String
+  title    String
+  severity Int
+  score    Int
+  status   String @default("open")
+  rationale Json  @default("{}")
+  metadata  Json  @default("{}")
+
+  evidenceLinks SignalEvidenceLink[]
+  entityLinks   SignalEntityLink[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, severity(sort: Desc), createdAt(sort: Desc)])
+  @@map("signals")
+}
+
+model SignalEvidenceLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  signalId  String   @db.Uuid @map("signal_id")
+  evidenceId String  @db.Uuid @map("evidence_id")
+
+  signal   Signal      @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  evidence EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, signalId, evidenceId])
+  @@unique([tenantId, evidenceId])
+  @@index([tenantId, signalId, createdAt(sort: Desc)])
+  @@map("signal_evidence_links")
+}
+
+model SignalEntityLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  signalId  String   @db.Uuid @map("signal_id")
+  entityId  String   @db.Uuid @map("entity_id")
+
+  signal Signal @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, signalId, entityId])
+  @@index([tenantId, signalId, createdAt(sort: Desc)])
+  @@map("signal_entity_links")
 }
 
 model RssFeed {
@@ -109,6 +164,183 @@ model DistributionTarget {
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@map("distribution_targets")
+}
+
+model PromptVersion {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid @map("tenant_id")
+  createdAt     DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt     DateTime @default(now()) @db.Timestamptz @map("updated_at")
+  name          String
+  schemaVersion String   @map("schema_version")
+  promptText    String   @map("prompt_text")
+  jsonSchema    Json     @default("{}") @map("json_schema")
+  changelog     String?
+
+  productConfigs ProductConfig[]
+
+  @@unique([tenantId, name, schemaVersion])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("prompt_versions")
+}
+
+model ProductConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  productType String @map("product_type")
+  name        String
+  enabled     Boolean @default(true)
+  cadence     String?
+  trigger     Json    @default("{}")
+  scope       Json    @default("{}")
+  templateMarkdown String @default("") @map("template_markdown")
+
+  promptVersionId String? @db.Uuid @map("prompt_version_id")
+  promptVersion   PromptVersion? @relation(fields: [promptVersionId], references: [id], onDelete: SetNull)
+
+  distributionRules Json @default("{}") @map("distribution_rules")
+  reviewPolicy      Json @default("{}") @map("review_policy")
+
+  @@unique([tenantId, productType])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("product_configs")
+}
+
+model Product {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  productType String @map("product_type")
+  title       String
+  status      String @default("draft")
+
+  confidenceLevel     String @default("UNKNOWN") @map("confidence_level")
+  confidenceRationale String @default("") @map("confidence_rationale")
+
+  likelihoodTerm String? @map("likelihood_term")
+  likelihoodMin  Float?  @map("likelihood_min")
+  likelihoodMax  Float?  @map("likelihood_max")
+
+  riskLikelihood Int? @map("risk_likelihood")
+  riskImpact     Int? @map("risk_impact")
+
+  keyJudgments   String[] @default([]) @map("key_judgments")
+  indicators     String[] @default([])
+  changeFromLast String?  @map("change_from_last")
+
+  contentMarkdown String? @map("content_markdown")
+  contentJson     Json    @default("{}") @map("content_json")
+
+  evidenceIds String[] @default([]) @map("evidence_ids") @db.Uuid
+  entityIds   String[] @default([]) @map("entity_ids") @db.Uuid
+
+  createdByUserId String? @map("created_by_user_id")
+  approvedByUserId String? @map("approved_by_user_id")
+  approvedAt      DateTime? @db.Timestamptz @map("approved_at")
+  distributedAt   DateTime? @db.Timestamptz @map("distributed_at")
+
+  actionItems ActionItem[]
+  productExport ProductExport?
+  distributions ProductDistributionRecord[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, productType, status])
+  @@map("products")
+}
+
+model ActionItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  productId String @db.Uuid @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  owner  String
+  dueAt  DateTime? @db.Timestamptz @map("due_at")
+  status String @default("open")
+  title  String
+  notes  String?
+
+  @@index([tenantId, dueAt])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("action_items")
+}
+
+model RunLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+
+  kind   String
+  status String
+  model  String?
+
+  promptVersionId String? @db.Uuid @map("prompt_version_id")
+
+  input  Json @default("{}")
+  output Json @default("{}")
+  error  String?
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("run_logs")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  action    String
+  actorUserId String? @map("actor_user_id")
+  targetType String? @map("target_type")
+  targetId   String? @db.Uuid @map("target_id")
+  metadata   Json    @default("{}")
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("audit_log")
+}
+
+model ProductExport {
+  productId String   @id @db.Uuid @map("product_id")
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz @map("updated_at")
+
+  pdfBytes    Bytes? @map("pdf_bytes")
+  pdfSha256   String? @map("pdf_sha256")
+  contentType String  @default("application/pdf") @map("content_type")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, updatedAt(sort: Desc)])
+  @@map("product_exports")
+}
+
+model ProductDistributionRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+
+  productId String @db.Uuid @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  kind   String
+  target String?
+  status String @default("pending")
+
+  sentAt DateTime? @db.Timestamptz @map("sent_at")
+  error  String?
+  metadata Json @default("{}")
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, productId, createdAt(sort: Desc)])
+  @@map("product_distribution_records")
 }
 
 

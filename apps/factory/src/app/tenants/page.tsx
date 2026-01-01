@@ -9,7 +9,7 @@ import { TenantPickerClient } from "./TenantPickerClient";
 export const runtime = "nodejs";
 
 export default async function TenantsPage() {
-  if (!env.featureFactoryApp) redirect("/");
+  if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
 
   const session = await getServerSession(getAuthOptions());
   const userId = session?.user?.id;

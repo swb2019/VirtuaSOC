@@ -51,6 +51,12 @@ env:
   redactPiiOnDistribution: "true"
   dataRetentionDays: "90"
   featureFactoryApp: "false"
+  featureRbac: "false"
+  featureEvidenceIngest: "false"
+  featureEntityLinking: "false"
+  featureSignals: "false"
+  featureProductFactory: "false"
+  featureReviewDistribution: "false"
 
 secrets:
   # If using External Secrets, set create=false and set existingSecretName to the Secret that ESO writes.
