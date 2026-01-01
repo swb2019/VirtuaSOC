@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/tenant"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+/// Tenant-plane evidence. Even with DB-per-tenant, we keep tenantId for defense-in-depth.
+model EvidenceItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  createdAt DateTime @default(now())
+  fetchedAt DateTime
+
+  sourceType   String
+  sourceUrl    String?
+  sourceMeta   Json     @default("{}")
+
+  contentHash  String?
+  title        String?
+  excerpt      String?
+  contentText  String?
+  geo          Json?
+
+  tags         String[] @default([])
+  piiFlag      Boolean  @default(false)
+
+  // Tradecraft: triage separate from confidence/likelihood (stored on Products later).
+  triageStatus String   @default("new")
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, fetchedAt(sort: Desc)])
+  @@index([tenantId, sourceUrl])
+  @@index([tenantId, contentHash])
+}
+
+

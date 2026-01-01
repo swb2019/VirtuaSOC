@@ -11,6 +11,9 @@ image:
   web:
     repository: ghcr.io/your-org/virtuasoc-web
     tag: latest
+  factory:
+    repository: ghcr.io/your-org/virtuasoc-factory
+    tag: latest
 
 # Image pull policy for all containers (api/worker/web)
 imagePullPolicy: IfNotPresent
@@ -23,6 +26,7 @@ imagePullSecrets: []
 service:
   apiPort: 3001
   webPort: 8080
+  factoryPort: 3000
 
 ingress:
   enabled: true
@@ -46,6 +50,7 @@ env:
   distributionRequireApproval: "true"
   redactPiiOnDistribution: "true"
   dataRetentionDays: "90"
+  featureFactoryApp: "false"
 
 secrets:
   # If using External Secrets, set create=false and set existingSecretName to the Secret that ESO writes.
@@ -74,11 +79,16 @@ resources:
   api: {}
   worker: {}
   web: {}
+  factory: {}
 
 replicaCount:
   api: 1
   worker: 1
   web: 1
+  factory: 1
+
+factory:
+  enabled: false
 
 serviceAccount:
   create: true

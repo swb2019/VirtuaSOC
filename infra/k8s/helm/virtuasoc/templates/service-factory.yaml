@@ -1,0 +1,20 @@
+{{- if .Values.factory.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "virtuasoc.fullname" . }}-factory
+  labels:
+    {{- include "virtuasoc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: factory
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: factory
+  ports:
+    - name: http
+      port: {{ .Values.service.factoryPort }}
+      targetPort: http
+{{- end -}}
+
+

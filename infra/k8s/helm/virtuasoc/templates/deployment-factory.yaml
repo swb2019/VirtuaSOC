@@ -1,0 +1,56 @@
+{{- if .Values.factory.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "virtuasoc.fullname" . }}-factory
+  labels:
+    {{- include "virtuasoc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: factory
+spec:
+  replicas: {{ .Values.replicaCount.factory }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: factory
+  template:
+    metadata:
+      labels:
+        {{- include "virtuasoc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: factory
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: factory
+          image: "{{ .Values.image.factory.repository }}:{{ .Values.image.factory.tag }}"
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.factoryPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "virtuasoc.fullname" . }}-config
+            - secretRef:
+                name: {{ include "virtuasoc.secretName" . }}
+          env:
+            - name: PORT
+              value: {{ .Values.service.factoryPort | quote }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources.factory | nindent 12 }}
+{{- end -}}
+
+

@@ -56,4 +56,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build & push factory
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/factory/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/virtuasoc-factory:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/virtuasoc-factory:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
 

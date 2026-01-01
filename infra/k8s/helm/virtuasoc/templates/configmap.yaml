@@ -11,5 +11,6 @@ data:
   DISTRIBUTION_REQUIRE_APPROVAL: {{ .Values.env.distributionRequireApproval | quote }}
   REDACT_PII_ON_DISTRIBUTION: {{ .Values.env.redactPiiOnDistribution | quote }}
   DATA_RETENTION_DAYS: {{ .Values.env.dataRetentionDays | quote }}
+  FEATURE_FACTORY_APP: {{ .Values.env.featureFactoryApp | quote }}
 
 
