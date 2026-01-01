@@ -129,12 +129,20 @@ export function AdminTenantDetailPage() {
             <span className="font-mono text-slate-200">{slug || "(loading…)"}</span>
           </div>
         </div>
-        <Link
-          to="/admin/tenants"
-          className="rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-slate-700"
-        >
-          Back
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            to={id ? `/admin/tenants/${encodeURIComponent(id)}/assistant` : "/admin/tenants"}
+            className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+          >
+            Setup Assistant
+          </Link>
+          <Link
+            to="/admin/tenants"
+            className="rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-slate-700"
+          >
+            Back
+          </Link>
+        </div>
       </div>
 
       {err ? <div className="rounded-xl border border-rose-900/40 bg-rose-950/30 p-4 text-sm text-rose-200">{err}</div> : null}

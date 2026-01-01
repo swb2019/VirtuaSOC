@@ -5,6 +5,7 @@ import { AdminLoginPage } from "./pages/admin/AdminLogin";
 import { AdminOidcCallbackPage } from "./pages/admin/AdminOidcCallback";
 import { AdminAuditPage } from "./pages/admin/AdminAudit";
 import { AdminTenantDetailPage } from "./pages/admin/AdminTenantDetail";
+import { AdminTenantAssistantPage } from "./pages/admin/AdminTenantAssistant";
 import { AdminTenantsPage } from "./pages/admin/AdminTenants";
 import { EvidencePage } from "./pages/Evidence";
 import { LoginPage } from "./pages/Login";
@@ -12,6 +13,7 @@ import { NewReportPage } from "./pages/NewReport";
 import { OidcCallbackPage } from "./pages/OidcCallback";
 import { ReportDetailPage } from "./pages/ReportDetail";
 import { ReportsPage } from "./pages/Reports";
+import { SetupAssistantPage } from "./pages/SetupAssistant";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -70,6 +72,7 @@ export function App() {
                     <Route path="/admin" element={<Navigate to="/admin/tenants" replace />} />
                     <Route path="/admin/tenants" element={<AdminTenantsPage />} />
                     <Route path="/admin/tenants/:id" element={<AdminTenantDetailPage />} />
+                    <Route path="/admin/tenants/:id/assistant" element={<AdminTenantAssistantPage />} />
                     <Route path="/admin/audit" element={<AdminAuditPage />} />
                     <Route path="*" element={<Navigate to="/admin/tenants" replace />} />
                   </Routes>
@@ -120,6 +123,9 @@ export function App() {
                       <Link to="/evidence" className="rounded-lg px-3 py-2 text-slate-200 hover:bg-slate-900/60">
                         Evidence
                       </Link>
+                      <Link to="/setup" className="rounded-lg px-3 py-2 text-slate-200 hover:bg-slate-900/60">
+                        Setup
+                      </Link>
                     </nav>
                   </aside>
 
@@ -130,6 +136,7 @@ export function App() {
                       <Route path="/reports/new" element={<NewReportPage />} />
                       <Route path="/reports/:id" element={<ReportDetailPage />} />
                       <Route path="/evidence" element={<EvidencePage />} />
+                      <Route path="/setup" element={<SetupAssistantPage />} />
                       <Route path="*" element={<Navigate to="/reports" replace />} />
                     </Routes>
                   </main>

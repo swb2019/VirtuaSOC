@@ -140,6 +140,19 @@ export class ApiClient {
     return (await res.json()) as { ok: boolean; generatedAt: string; report: any; sections: any[]; evidence: any[] };
   }
 
+  async assistantChat(messages: { role: "user" | "assistant"; content: string }[]) {
+    const res = await fetch("/api/assistant/chat", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ messages }),
+    });
+    if (!res.ok) throw new Error(`assistant chat failed: ${res.status}`);
+    return (await res.json()) as {
+      reply: string;
+      appliedActions: { tool: string; input: unknown; output: unknown }[];
+    };
+  }
+
   async listEvidence(opts?: { q?: string; status?: "new" | "triaged"; tag?: string }) {
     const url = new URL("/api/evidence", window.location.origin);
     if (opts?.q) url.searchParams.set("q", opts.q);
@@ -314,6 +327,19 @@ export class AdminApiClient {
             roleMapping: Record<string, string>;
           }
         | null;
+    };
+  }
+
+  async assistantChat(tenantId: string, messages: { role: "user" | "assistant"; content: string }[]) {
+    const res = await fetch("/api/admin/assistant/chat", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ tenantId, messages }),
+    });
+    if (!res.ok) throw new Error(`admin assistant chat failed: ${res.status}`);
+    return (await res.json()) as {
+      reply: string;
+      appliedActions: { tool: string; input: unknown; output: unknown }[];
     };
   }
 }
