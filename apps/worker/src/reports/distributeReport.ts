@@ -135,7 +135,20 @@ export async function distributeReport(db: Db, payload: DistributeReportJobPaylo
       if (!to) throw new Error("Missing email target");
       await sendEmail(smtp, to, subject, text);
     } else {
-      const webhookUrl = (process.env.TEAMS_WEBHOOK_URL ?? "").trim();
+      // Prefer per-tenant Teams webhook if configured; otherwise fall back to global TEAMS_WEBHOOK_URL.
+      let webhookUrl = "";
+      try {
+        const rows = await db<{ value: string; enabled: boolean }[]>`
+          SELECT value, enabled
+          FROM distribution_targets
+          WHERE tenant_id = ${payload.tenantId} AND kind = ${"teams_webhook"}
+          LIMIT 1
+        `;
+        if (rows[0]?.enabled) webhookUrl = String(rows[0]!.value ?? "").trim();
+      } catch {
+        // Table may not exist yet on older tenant DBs.
+      }
+      if (!webhookUrl) webhookUrl = (process.env.TEAMS_WEBHOOK_URL ?? "").trim();
       if (!webhookUrl) throw new Error("TEAMS_WEBHOOK_URL not configured");
       await sendTeamsWebhook(webhookUrl, { title: subject, text });
     }
