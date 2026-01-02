@@ -70,6 +70,7 @@ jobs:
 
       - name: Ensure GHCR package is public (factory)
         if: github.ref == 'refs/heads/main'
+        continue-on-error: true
         run: |
           set -euo pipefail
           # NOTE: For personal accounts, use /user/...; for orgs, use /orgs/<org>/...
