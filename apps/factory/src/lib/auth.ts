@@ -103,11 +103,19 @@ export function getAuthOptions(): NextAuthOptions {
           if (accepted) return true;
         }
 
-        // 3) Bootstrap: if there are no tenants yet, create demo and grant ADMIN to the first user.
+        // 3) Bootstrap: if Factory has no memberships yet, grant ADMIN to the first user.
         const tenantCount = await db.tenant.count();
-        if (tenantCount === 0) {
-          const tenant = await db.tenant.create({ data: { slug: "demo", name: "Demo" } });
-          await db.membership.create({ data: { tenantId: tenant.id, userId, role: "ADMIN" } });
+        const membershipCount = await db.membership.count();
+        if (membershipCount === 0) {
+          if (tenantCount === 0) {
+            const tenant = await db.tenant.create({ data: { slug: "demo", name: "Demo" } });
+            await db.membership.create({ data: { tenantId: tenant.id, userId, role: "ADMIN" } });
+            return true;
+          }
+
+          const firstTenant = await db.tenant.findFirst({ orderBy: { createdAt: "asc" } });
+          if (!firstTenant) return false;
+          await db.membership.create({ data: { tenantId: firstTenant.id, userId, role: "ADMIN" } });
           return true;
         }
 
