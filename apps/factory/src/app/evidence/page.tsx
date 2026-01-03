@@ -181,10 +181,11 @@ export default async function EvidencePage() {
     const { tenant, membership } = await requireTenantDb("ANALYST");
     const evidenceId = String(formData.get("evidenceId") ?? "").trim();
     if (!evidenceId) throw new Error("evidenceId is required");
+    const runId = Date.now();
     await getIngestQueue().add(
       JOB_EVIDENCE_ENRICH,
-      { tenantId: tenant.id, evidenceId, actorUserId: membership.userId },
-      { jobId: `enrich:${tenant.id}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      { tenantId: tenant.id, evidenceId, actorUserId: membership.userId, force: true },
+      { jobId: `enrich:${tenant.id}:${evidenceId}:manual:${runId}`, removeOnComplete: 1000, removeOnFail: 1000 },
     );
     redirect("/evidence");
   }

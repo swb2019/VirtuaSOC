@@ -35,10 +35,11 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   async function enqueueEnrich() {
     "use server";
     const { tenant, membership } = await requireTenantDb("ANALYST");
+    const runId = Date.now();
     await getIngestQueue().add(
       JOB_EVIDENCE_ENRICH,
       { tenantId: tenant.id, evidenceId, actorUserId: membership.userId, force: true },
-      { jobId: `enrich:${tenant.id}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      { jobId: `enrich:${tenant.id}:${evidenceId}:manual:${runId}`, removeOnComplete: 1000, removeOnFail: 1000 },
     );
     redirect(`/evidence/${evidenceId}`);
   }
