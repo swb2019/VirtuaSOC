@@ -7,6 +7,7 @@ import { env } from "@/env";
 import { TenantPickerClient } from "./TenantPickerClient";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function TenantsPage() {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");

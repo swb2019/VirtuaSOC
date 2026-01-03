@@ -1,10 +1,14 @@
 import { env } from "@/env";
+import { getServerSession } from "next-auth";
+import { getAuthOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home() {
   const enabled = env.featureFactoryApp;
+  const session = await getServerSession(getAuthOptions());
+  const signedIn = Boolean(session?.user && (session.user as any).id);
 
   if (!enabled) {
     return (
@@ -48,12 +52,21 @@ export default function Home() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/login"
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-          >
-            Sign in
-          </a>
+          {!signedIn ? (
+            <a
+              href="/login"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Sign in
+            </a>
+          ) : (
+            <a
+              href="/tenants"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Continue
+            </a>
+          )}
           <a
             href="/tenants"
             className="rounded-lg border border-zinc-800 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-100 hover:border-zinc-700"
