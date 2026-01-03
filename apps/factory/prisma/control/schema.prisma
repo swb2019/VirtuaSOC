@@ -8,12 +8,6 @@ datasource db {
   url      = env("CONTROL_DATABASE_URL")
 }
 
-enum TenantRole {
-  ADMIN
-  ANALYST
-  VIEWER
-}
-
 /// Control-plane tenant registry.
 model Tenant {
   id        String   @id @default(uuid()) @db.Uuid
@@ -110,7 +104,8 @@ model Membership {
   id        String     @id @default(uuid()) @db.Uuid
   tenantId  String     @db.Uuid @map("tenant_id")
   userId    String     @db.Uuid @map("user_id")
-  role      TenantRole @default(ANALYST)
+  // Stored as TEXT in SQL migrations with a CHECK constraint.
+  role      String     @default("ANALYST")
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")
 
@@ -128,7 +123,8 @@ model Invitation {
   id        String     @id @default(uuid()) @db.Uuid
   tenantId  String     @db.Uuid @map("tenant_id")
   email     String
-  role      TenantRole @default(ANALYST)
+  // Stored as TEXT in SQL migrations with a CHECK constraint.
+  role      String     @default("ANALYST")
   token     String     @unique
   expiresAt DateTime   @map("expires_at")
   acceptedAt DateTime? @map("accepted_at")
