@@ -17,7 +17,8 @@ export function TenantPickerClient({ slug }: { slug: string }) {
           .then(async (r) => {
             if (!r.ok) throw new Error(`select failed: ${r.status}`);
           })
-          .then(() => (window.location.href = "/"))
+          // After selecting a tenant, drop the user into the tenant workspace.
+          .then(() => (window.location.href = "/products"))
           .catch((e) => {
             const msg = e instanceof Error ? e.message : String(e);
             alert(msg);

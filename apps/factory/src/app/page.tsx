@@ -1,6 +1,7 @@
 import { env } from "@/env";
 import { getServerSession } from "next-auth";
 import { getAuthOptions } from "@/lib/auth";
+import { getActiveTenantSlug } from "@/lib/tenancy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export default async function Home() {
   const enabled = env.featureFactoryApp;
   const session = await getServerSession(getAuthOptions());
   const signedIn = Boolean(session?.user && (session.user as any).id);
+  const activeTenantSlug = signedIn ? await getActiveTenantSlug() : null;
 
   if (!enabled) {
     return (
@@ -61,7 +63,7 @@ export default async function Home() {
             </a>
           ) : (
             <a
-              href="/tenants"
+              href={activeTenantSlug ? "/products" : "/tenants"}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
             >
               Continue
