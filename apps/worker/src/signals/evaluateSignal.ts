@@ -92,9 +92,9 @@ function scoreFromSource(sourceType: string, sourceUri: string | null): { score:
   return { score, reasons };
 }
 
-type GeoPoint = { lat: number; lon: number };
+export type GeoPoint = { lat: number; lon: number };
 
-function geoFromMetadata(meta: any): GeoPoint | null {
+export function geoFromMetadata(meta: any): GeoPoint | null {
   const candidates: any[] = [
     meta?.geo,
     meta?.location,
@@ -116,7 +116,7 @@ function geoFromMetadata(meta: any): GeoPoint | null {
   return null;
 }
 
-function haversineKm(a: GeoPoint, b: GeoPoint): number {
+export function haversineKm(a: GeoPoint, b: GeoPoint): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
   const dLon = ((b.lon - a.lon) * Math.PI) / 180;
@@ -163,7 +163,7 @@ async function scoreFromGeoProximity(
   return { score: 0, reason: `geo_proximity>200km (+0)` };
 }
 
-function severityFromScore(score: number): number {
+export function severityFromScore(score: number): number {
   const s = clamp(score, 0, 100);
   if (s >= 80) return 5;
   if (s >= 60) return 4;
@@ -218,7 +218,7 @@ type GeofenceRow = {
   metadata: any;
 };
 
-function scoreFromFacilityReputationTags(tags: string[]): { score: number; reasons: string[] } {
+export function scoreFromFacilityReputationTags(tags: string[]): { score: number; reasons: string[] } {
   const t = new Set(tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean));
   let score = 0;
   const reasons: string[] = [];
@@ -245,7 +245,7 @@ function scoreFromFacilityReputationTags(tags: string[]): { score: number; reaso
   return { score, reasons };
 }
 
-function scoreFromDistanceKm(distanceKm: number): { score: number; reason: string } {
+export function scoreFromDistanceKm(distanceKm: number): { score: number; reason: string } {
   if (!Number.isFinite(distanceKm)) return { score: 0, reason: "distance=unknown (+0)" };
   if (distanceKm <= 1) return { score: 45, reason: "distance<=1km (+45)" };
   if (distanceKm <= 5) return { score: 30, reason: "distance<=5km (+30)" };
