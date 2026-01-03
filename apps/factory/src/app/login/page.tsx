@@ -5,6 +5,9 @@ import { getAuthOptions } from "@/lib/auth";
 import { env } from "@/env";
 import { LoginClient } from "./LoginClient";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
 
