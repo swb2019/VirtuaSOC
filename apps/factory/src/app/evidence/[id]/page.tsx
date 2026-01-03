@@ -8,11 +8,12 @@ import { getIngestQueue, JOB_EVIDENCE_ENRICH } from "@/lib/queue";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function EvidenceDetailPage({ params }: { params: { id: string } }) {
+export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
   if (!env.featureEvidenceIngest) redirect("/evidence");
 
-  const evidenceId = String(params.id ?? "").trim();
+  const p = await params;
+  const evidenceId = String(p?.id ?? "").trim();
   if (!evidenceId) notFound();
 
   const { tenant, tenantDb } = await requireTenantDb("VIEWER");
