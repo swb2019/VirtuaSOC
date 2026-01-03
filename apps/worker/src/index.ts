@@ -174,7 +174,22 @@ async function main() {
       if (job.name === JOBS.evaluateSignal) {
         const payload = job.data as EvaluateSignalJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
-        await evaluateSignal(tenantDb, payload);
+        const createdSignals = await evaluateSignal(tenantDb, payload);
+
+        // Optional: auto-draft a Flash Alert when a high-severity facility geofence signal is created.
+        const productFactoryEnabled = (process.env.FEATURE_PRODUCT_FACTORY ?? "false").trim().toLowerCase() === "true";
+        if (productFactoryEnabled) {
+          for (const s of createdSignals) {
+            if (s.kind !== "facility_geofence") continue;
+            if (s.severity < 4) continue;
+
+            await ingestQueue.add(
+              JOBS.generateProduct,
+              { tenantId: payload.tenantId, productType: "flash_alert", signalId: s.id } satisfies GenerateProductJobPayload,
+              { jobId: `prodgen:${payload.tenantId}:flash_alert:sig:${s.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+            );
+          }
+        }
         return;
       }
       if (job.name === JOBS.enrichEvidence) {
