@@ -10,6 +10,10 @@ function randomTokenBase64Url(bytes = 24) {
   return randomBytes(bytes).toString("base64url");
 }
 
+function normalizeEmail(email: string | null | undefined): string {
+  return (email ?? "").trim().toLowerCase();
+}
+
 function tryParseTenantIdFromIssuer(issuer: string): string | null {
   const raw = (issuer ?? "").trim();
   if (!raw) return null;
@@ -88,36 +92,24 @@ export function getAuthOptions(): NextAuthOptions {
     callbacks: {
       async signIn({ user }) {
         if (!env.featureFactoryApp || !env.featureRbac) return false;
-        if (!user?.id) return false;
 
-        const email = (user.email ?? "").trim().toLowerCase();
-        const userId = user.id;
+        const email = normalizeEmail(user?.email);
+        if (!email) return false;
 
-        // 1) If the user already has membership, allow.
-        const existing = await db.membership.findFirst({ where: { userId } });
+        // 1) If the user already has membership (by email), allow.
+        const existing = await db.membership.findFirst({ where: { user: { email } } });
         if (existing) return true;
 
-        // 2) If there is a pending invitation matching email, accept it and allow.
-        if (email) {
-          const accepted = await acceptInvitationByEmail(db, userId, email);
-          if (accepted) return true;
-        }
+        // 2) If there is a pending invitation matching email, allow.
+        // Membership creation + acceptance happens in events.signIn (after NextAuth has persisted the user).
+        const pendingInvite = await db.invitation.findFirst({
+          where: { email, acceptedAt: null, expiresAt: { gt: new Date() } },
+        });
+        if (pendingInvite) return true;
 
-        // 3) Bootstrap: if Factory has no memberships yet, grant ADMIN to the first user.
-        const tenantCount = await db.tenant.count();
+        // 3) Bootstrap: if Factory has no memberships yet, allow the first user.
         const membershipCount = await db.membership.count();
-        if (membershipCount === 0) {
-          if (tenantCount === 0) {
-            const tenant = await db.tenant.create({ data: { slug: "demo", name: "Demo" } });
-            await db.membership.create({ data: { tenantId: tenant.id, userId, role: "ADMIN" } });
-            return true;
-          }
-
-          const firstTenant = await db.tenant.findFirst({ orderBy: { createdAt: "asc" } });
-          if (!firstTenant) return false;
-          await db.membership.create({ data: { tenantId: firstTenant.id, userId, role: "ADMIN" } });
-          return true;
-        }
+        if (membershipCount === 0) return true;
 
         // 4) Otherwise, deny sign-in (must be invited by a tenant admin).
         return false;
@@ -128,6 +120,42 @@ export function getAuthOptions(): NextAuthOptions {
           (session.user as any).id = user.id;
         }
         return session;
+      },
+    },
+    events: {
+      async signIn({ user }) {
+        if (!env.featureFactoryApp || !env.featureRbac) return;
+
+        const email = normalizeEmail(user?.email);
+        if (!email) return;
+
+        // Use the persisted DB user (UUID) to avoid mismatches with provider profile ids.
+        const dbUser = await db.user.findUnique({ where: { email } });
+        if (!dbUser) return;
+        const userId = dbUser.id;
+
+        // If membership already exists, nothing to do.
+        const existing = await db.membership.findFirst({ where: { userId } });
+        if (existing) return;
+
+        // If invited, accept + create membership.
+        const accepted = await acceptInvitationByEmail(db, userId, email);
+        if (accepted) return;
+
+        // Bootstrap: if Factory has no memberships yet, grant ADMIN to the first user.
+        const membershipCount = await db.membership.count();
+        if (membershipCount !== 0) return;
+
+        const tenantCount = await db.tenant.count();
+        if (tenantCount === 0) {
+          const tenant = await db.tenant.create({ data: { slug: "demo", name: "Demo" } });
+          await db.membership.create({ data: { tenantId: tenant.id, userId, role: "ADMIN" } });
+          return;
+        }
+
+        const firstTenant = await db.tenant.findFirst({ orderBy: { createdAt: "asc" } });
+        if (!firstTenant) return;
+        await db.membership.create({ data: { tenantId: firstTenant.id, userId, role: "ADMIN" } });
       },
     },
   };
