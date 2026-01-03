@@ -95,6 +95,12 @@ export default async function SignalsPage() {
             Evidence
           </a>
           <a
+            href="/geofences"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Geofences
+          </a>
+          <a
             href="/entities"
             className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
           >
@@ -113,6 +119,16 @@ export default async function SignalsPage() {
                   kind={s.kind} • severity={s.severity} • score={s.score} • status={s.status} •{" "}
                   {new Date(s.createdAt).toLocaleString()}
                 </div>
+                  {s.kind === "facility_geofence" ? (
+                    <div className="mt-2 text-xs text-zinc-300">
+                      <span className="rounded-md border border-zinc-800 bg-black/20 px-2 py-1">
+                        geofence: {String((s.metadata as any)?.geofenceName ?? "—")} •{" "}
+                        {typeof (s.metadata as any)?.distanceKm === "number"
+                          ? `${(s.metadata as any).distanceKm.toFixed(2)} km`
+                          : "—"}
+                      </span>
+                    </div>
+                  ) : null}
               </div>
               <div className="flex items-center gap-2">
                 {env.featureProductFactory ? (

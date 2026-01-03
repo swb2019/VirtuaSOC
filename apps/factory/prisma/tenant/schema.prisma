@@ -31,6 +31,7 @@ model EvidenceItem {
   entityLinks EvidenceEntityLink[]
   signalLinks SignalEvidenceLink[]
   indicators  EvidenceIndicator[]
+  geofenceMatches GeofenceMatch[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
@@ -59,6 +60,55 @@ model EvidenceIndicator {
   @@map("evidence_indicators")
 }
 
+model Geofence {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @default(now()) @db.Timestamptz @map("updated_at")
+
+  name    String
+  enabled Boolean @default(true)
+  kind    String
+
+  centerLat Float @map("center_lat")
+  centerLon Float @map("center_lon")
+  radiusKm  Float @map("radius_km")
+
+  entityId String? @db.Uuid @map("entity_id")
+  entity   Entity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  tags     String[] @default([])
+  metadata Json     @default("{}")
+
+  matches GeofenceMatch[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, enabled, centerLat])
+  @@index([tenantId, enabled, centerLon])
+  @@index([tenantId, entityId])
+  @@map("geofences")
+}
+
+model GeofenceMatch {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+
+  geofenceId String @db.Uuid @map("geofence_id")
+  evidenceId String @db.Uuid @map("evidence_id")
+
+  distanceKm Float? @map("distance_km")
+  metadata   Json   @default("{}")
+
+  geofence Geofence   @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
+  evidence EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, geofenceId, evidenceId])
+  @@index([tenantId, evidenceId, createdAt(sort: Desc)])
+  @@index([tenantId, geofenceId, createdAt(sort: Desc)])
+  @@map("geofence_matches")
+}
+
 model Entity {
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @db.Uuid @map("tenant_id")
@@ -73,6 +123,7 @@ model Entity {
 
   links EvidenceEntityLink[]
   signalLinks SignalEntityLink[]
+  geofences Geofence[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, type])
@@ -129,7 +180,6 @@ model SignalEvidenceLink {
   evidence EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, signalId, evidenceId])
-  @@unique([tenantId, evidenceId])
   @@index([tenantId, signalId, createdAt(sort: Desc)])
   @@map("signal_evidence_links")
 }

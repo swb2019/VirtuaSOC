@@ -29,6 +29,23 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
     take: 2000,
   });
 
+  const geofenceMatches = await tenantDb.geofenceMatch.findMany({
+    where: { tenantId: tenant.id, evidenceId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: { geofence: { include: { entity: true } } },
+  });
+
+  const facilitySignals = await tenantDb.signal.findMany({
+    where: {
+      tenantId: tenant.id,
+      kind: "facility_geofence",
+      evidenceLinks: { some: { tenantId: tenant.id, evidenceId } },
+    },
+    orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+    take: 50,
+  });
+
   const enrichment = (evidence.metadata as any)?.enrichment ?? null;
   const fetch = enrichment?.fetch ?? null;
 
@@ -139,6 +156,53 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
             </pre>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold">Nearby facilities (geofences)</div>
+          <div className="text-xs text-zinc-400">{geofenceMatches.length} matches</div>
+        </div>
+
+        {!geofenceMatches.length ? (
+          <div className="mt-4 text-sm text-zinc-400">No geofence matches for this evidence.</div>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800">
+            <table className="w-full text-sm">
+              <thead className="bg-black/40 text-left text-zinc-300">
+                <tr>
+                  <th className="px-4 py-3">Geofence</th>
+                  <th className="px-4 py-3">Kind</th>
+                  <th className="px-4 py-3">Linked facility</th>
+                  <th className="px-4 py-3">Distance</th>
+                  <th className="px-4 py-3">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+                {geofenceMatches.map((m) => (
+                  <tr key={m.id}>
+                    <td className="px-4 py-3 font-semibold text-zinc-100">{m.geofence.name}</td>
+                    <td className="px-4 py-3 text-zinc-300">{m.geofence.kind}</td>
+                    <td className="px-4 py-3 text-zinc-300">{m.geofence.entity?.name ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-200">
+                      {typeof m.distanceKm === "number" ? `${m.distanceKm.toFixed(2)} km` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{new Date(m.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {facilitySignals.length ? (
+          <div className="mt-4 text-xs text-zinc-400">
+            Signals:{" "}
+            <a className="text-sky-300 hover:underline" href="/signals">
+              view in Signals
+            </a>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">

@@ -7,6 +7,13 @@ export type EvaluateSignalJobPayload = {
   evidenceId: string;
 };
 
+export type CreatedSignal = {
+  id: string;
+  kind: string;
+  severity: number;
+  score: number;
+};
+
 type EvidenceRow = {
   id: string;
   fetched_at: string;
@@ -88,12 +95,25 @@ function scoreFromSource(sourceType: string, sourceUri: string | null): { score:
 type GeoPoint = { lat: number; lon: number };
 
 function geoFromMetadata(meta: any): GeoPoint | null {
-  const g = meta?.geo ?? meta?.location ?? null;
-  const lat = Number(g?.lat ?? g?.latitude ?? NaN);
-  const lon = Number(g?.lon ?? g?.lng ?? g?.longitude ?? NaN);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-  return { lat, lon };
+  const candidates: any[] = [
+    meta?.geo,
+    meta?.location,
+    meta?.raw?.geo,
+    meta?.raw?.location,
+    meta?.raw,
+    meta,
+  ];
+
+  for (const g of candidates) {
+    if (!g || typeof g !== "object") continue;
+    const lat = Number((g as any).lat ?? (g as any).latitude ?? NaN);
+    const lon = Number((g as any).lon ?? (g as any).lng ?? (g as any).longitude ?? NaN);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+    return { lat, lon };
+  }
+
+  return null;
 }
 
 function haversineKm(a: GeoPoint, b: GeoPoint): number {
@@ -186,24 +206,76 @@ export async function computeSignalScore(db: Db, tenantId: string, evidence: Evi
   return { score, severity, reasons: parts };
 }
 
-export async function evaluateSignal(db: Db, payload: EvaluateSignalJobPayload) {
+type GeofenceRow = {
+  id: string;
+  name: string;
+  kind: string;
+  center_lat: number;
+  center_lon: number;
+  radius_km: number;
+  entity_id: string | null;
+  tags: string[];
+  metadata: any;
+};
+
+function scoreFromFacilityReputationTags(tags: string[]): { score: number; reasons: string[] } {
+  const t = new Set(tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean));
+  let score = 0;
+  const reasons: string[] = [];
+
+  const add = (pts: number, reason: string) => {
+    score += pts;
+    reasons.push(`${reason} (+${pts})`);
+  };
+
+  // Facility security tags (examples; tune per tenant).
+  if (t.has("protest") || t.has("demonstration")) add(20, "tag=protest");
+  if (t.has("violence") || t.has("assault")) add(25, "tag=violence");
+  if (t.has("shooting")) add(35, "tag=shooting");
+  if (t.has("arson") || t.has("fire")) add(25, "tag=arson");
+  if (t.has("bomb_threat") || t.has("bomb")) add(40, "tag=bomb_threat");
+  if (t.has("strike") || t.has("union")) add(15, "tag=strike_or_union");
+  if (t.has("disruption") || t.has("closure")) add(15, "tag=disruption");
+
+  // Reputation tags (examples; tune per tenant).
+  if (t.has("reputation") || t.has("negative_media")) add(15, "tag=reputation");
+  if (t.has("activism") || t.has("boycott")) add(20, "tag=activism_or_boycott");
+  if (t.has("regulatory") || t.has("investigation")) add(15, "tag=regulatory");
+
+  return { score, reasons };
+}
+
+function scoreFromDistanceKm(distanceKm: number): { score: number; reason: string } {
+  if (!Number.isFinite(distanceKm)) return { score: 0, reason: "distance=unknown (+0)" };
+  if (distanceKm <= 1) return { score: 45, reason: "distance<=1km (+45)" };
+  if (distanceKm <= 5) return { score: 30, reason: "distance<=5km (+30)" };
+  if (distanceKm <= 10) return { score: 20, reason: "distance<=10km (+20)" };
+  if (distanceKm <= 25) return { score: 10, reason: "distance<=25km (+10)" };
+  return { score: 0, reason: "distance>25km (+0)" };
+}
+
+async function alreadyHasSignalKind(db: Db, tenantId: string, evidenceId: string, kind: string): Promise<boolean> {
+  const rows = await db<{ ok: number }[]>`
+    SELECT 1 as ok
+    FROM signal_evidence_links l
+    JOIN signals s ON s.id = l.signal_id
+    WHERE l.tenant_id = ${tenantId} AND l.evidence_id = ${evidenceId} AND s.kind = ${kind}
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+export async function evaluateSignal(db: Db, payload: EvaluateSignalJobPayload): Promise<CreatedSignal[]> {
+  const created: CreatedSignal[] = [];
   // If signals tables aren't migrated yet, just no-op.
   try {
-    const already = await db<{ ok: number }[]>`
-      SELECT 1 as ok
-      FROM signal_evidence_links
-      WHERE tenant_id = ${payload.tenantId} AND evidence_id = ${payload.evidenceId}
-      LIMIT 1
-    `;
-    if (already.length) return;
-
     const evidenceRows = await db<EvidenceRow[]>`
       SELECT id, fetched_at, source_type, source_uri, title, summary, tags, metadata
       FROM evidence_items
       WHERE tenant_id = ${payload.tenantId} AND id = ${payload.evidenceId}
       LIMIT 1
     `;
-    if (!evidenceRows.length) return;
+    if (!evidenceRows.length) return created;
     const evidence = evidenceRows[0]!;
 
     const entityIdsRows = await db<{ entity_id: string }[]>`
@@ -213,62 +285,181 @@ export async function evaluateSignal(db: Db, payload: EvaluateSignalJobPayload) 
     `;
     const entityIds = entityIdsRows.map((r) => r.entity_id);
 
-    const { score, severity, reasons } = await computeSignalScore(db, payload.tenantId, evidence, entityIds);
+    // 1) OSINT rule signal (idempotent per evidence for this kind)
+    const hasOsintRule = await alreadyHasSignalKind(db, payload.tenantId, payload.evidenceId, "osint_rule");
+    if (!hasOsintRule) {
+      const { score, severity, reasons } = await computeSignalScore(db, payload.tenantId, evidence, entityIds);
 
-    // MVP threshold: create signals only for meaningful scores.
-    if (score < 20) return;
+      // MVP threshold: create signals only for meaningful scores.
+      if (score >= 20) {
+        const signalId = randomUUID();
+        const title = evidence.title ?? evidence.summary?.slice(0, 140) ?? `Signal from evidence ${evidence.id}`;
 
-    const signalId = randomUUID();
-    const title = evidence.title ?? evidence.summary?.slice(0, 140) ?? `Signal from evidence ${evidence.id}`;
+        await db.begin(async (tx) => {
+          await tx`
+            INSERT INTO signals (
+              id, tenant_id, kind, title, severity, score, status, rationale
+            ) VALUES (
+              ${signalId},
+              ${payload.tenantId},
+              ${"osint_rule"},
+              ${title},
+              ${severity},
+              ${score},
+              ${"open"},
+              ${tx.json({ reasons })}
+            )
+          `;
 
-    await db.begin(async (tx) => {
-      await tx`
-        INSERT INTO signals (
-          id, tenant_id, kind, title, severity, score, status, rationale
-        ) VALUES (
-          ${signalId},
-          ${payload.tenantId},
-          ${"osint_rule"},
-          ${title},
-          ${severity},
-          ${score},
-          ${"open"},
-          ${tx.json({ reasons })}
-        )
-      `;
+          await tx`
+            INSERT INTO signal_evidence_links (id, tenant_id, signal_id, evidence_id)
+            VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${payload.evidenceId})
+          `;
 
-      await tx`
-        INSERT INTO signal_evidence_links (id, tenant_id, signal_id, evidence_id)
-        VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${payload.evidenceId})
-      `;
+          for (const row of entityIds) {
+            await tx`
+              INSERT INTO signal_entity_links (id, tenant_id, signal_id, entity_id)
+              VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${row.entity_id})
+              ON CONFLICT DO NOTHING
+            `;
+          }
 
-      for (const row of entityIds) {
-        await tx`
-          INSERT INTO signal_entity_links (id, tenant_id, signal_id, entity_id)
-          VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${row.entity_id})
-          ON CONFLICT DO NOTHING
+          await tx`
+            INSERT INTO audit_log (id, tenant_id, action, actor_user_id, target_type, target_id, metadata)
+            VALUES (
+              ${randomUUID()},
+              ${payload.tenantId},
+              ${"signal.created"},
+              ${null},
+              ${"signal"},
+              ${signalId},
+              ${tx.json({ evidenceId: payload.evidenceId, kind: "osint_rule", score, severity, reasons })}
+            )
+          `;
+        });
+
+        created.push({ id: signalId, kind: "osint_rule", severity, score });
+      }
+    }
+
+    // 2) Facility geofence signals (many-per-evidence, idempotent via geofence_matches)
+    const evGeo = geoFromMetadata(evidence.metadata);
+    if (evGeo) {
+      let geofences: GeofenceRow[] = [];
+      try {
+        geofences = await db<GeofenceRow[]>`
+          SELECT id, name, kind, center_lat, center_lon, radius_km, entity_id, tags, metadata
+          FROM geofences
+          WHERE tenant_id = ${payload.tenantId} AND enabled = true
+          ORDER BY created_at DESC
+          LIMIT 1000
         `;
+      } catch (err) {
+        const msg = String((err as any)?.message ?? err);
+        if (!(msg.includes("relation") && msg.includes("geofences"))) throw err;
       }
 
-      await tx`
-        INSERT INTO audit_log (id, tenant_id, action, actor_user_id, target_type, target_id, metadata)
-        VALUES (
-          ${randomUUID()},
-          ${payload.tenantId},
-          ${"signal.created"},
-          ${null},
-          ${"signal"},
-          ${signalId},
-          ${tx.json({ evidenceId: payload.evidenceId, score, severity, reasons })}
-        )
-      `;
-    });
+      const evidenceTags = evidence.tags ?? [];
+
+      const matches = geofences
+        .map((g) => {
+          const distKm = haversineKm(evGeo, { lat: Number(g.center_lat), lon: Number(g.center_lon) });
+          return { geofence: g, distanceKm: distKm };
+        })
+        .filter((m) => Number.isFinite(m.distanceKm) && m.distanceKm <= Number(m.geofence.radius_km));
+
+      if (matches.length) {
+        await db.begin(async (tx) => {
+          for (const m of matches) {
+            const g = m.geofence;
+            const distanceKm = m.distanceKm;
+
+            // Idempotency: only one match per (tenant, geofence, evidence).
+            const matchId = randomUUID();
+            let inserted = false;
+            try {
+              const rows = await tx<{ id: string }[]>`
+                INSERT INTO geofence_matches (id, tenant_id, geofence_id, evidence_id, distance_km)
+                VALUES (${matchId}, ${payload.tenantId}, ${g.id}, ${payload.evidenceId}, ${distanceKm})
+                ON CONFLICT (tenant_id, geofence_id, evidence_id) DO NOTHING
+                RETURNING id
+              `;
+              inserted = rows.length > 0;
+            } catch (err) {
+              const msg = String((err as any)?.message ?? err);
+              if (msg.includes("relation") && msg.includes("geofence_matches")) return;
+              throw err;
+            }
+            if (!inserted) continue;
+
+            const distScore = scoreFromDistanceKm(distanceKm);
+            const tagScore = scoreFromFacilityReputationTags([...(g.tags ?? []), ...evidenceTags]);
+            const src = scoreFromSource(evidence.source_type, evidence.source_uri);
+
+            let score = distScore.score + tagScore.score + src.score;
+            score = clamp(score, 0, 100);
+            const severity = severityFromScore(score);
+
+            const reasons = [distScore.reason, ...tagScore.reasons, ...src.reasons];
+
+            const signalId = randomUUID();
+            const baseTitle = evidence.title ?? evidence.summary?.slice(0, 80) ?? "OSINT event";
+            const title = `${g.name}: ${baseTitle}`.slice(0, 180);
+
+            await tx`
+              INSERT INTO signals (
+                id, tenant_id, kind, title, severity, score, status, rationale, metadata
+              ) VALUES (
+                ${signalId},
+                ${payload.tenantId},
+                ${"facility_geofence"},
+                ${title},
+                ${severity},
+                ${score},
+                ${"open"},
+                ${tx.json({ reasons, distanceKm, geofenceId: g.id, geofenceName: g.name })},
+                ${tx.json({ geofenceId: g.id, geofenceName: g.name, geofenceKind: g.kind, distanceKm })}
+              )
+            `;
+
+            await tx`
+              INSERT INTO signal_evidence_links (id, tenant_id, signal_id, evidence_id)
+              VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${payload.evidenceId})
+            `;
+
+            if (g.entity_id) {
+              await tx`
+                INSERT INTO signal_entity_links (id, tenant_id, signal_id, entity_id)
+                VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${g.entity_id})
+                ON CONFLICT DO NOTHING
+              `;
+            }
+
+            await tx`
+              INSERT INTO audit_log (id, tenant_id, action, actor_user_id, target_type, target_id, metadata)
+              VALUES (
+                ${randomUUID()},
+                ${payload.tenantId},
+                ${"signal.created"},
+                ${null},
+                ${"signal"},
+                ${signalId},
+                ${tx.json({ evidenceId: payload.evidenceId, kind: "facility_geofence", score, severity, reasons, geofenceId: g.id, distanceKm })}
+              )
+            `;
+
+            created.push({ id: signalId, kind: "facility_geofence", severity, score });
+          }
+        });
+      }
+    }
   } catch (err) {
     const msg = String((err as any)?.message ?? err);
     // If tables are missing, swallow. Otherwise rethrow.
     if (msg.includes("relation") && (msg.includes("signals") || msg.includes("signal_evidence_links"))) return;
     throw err;
   }
+  return created;
 }
 
 

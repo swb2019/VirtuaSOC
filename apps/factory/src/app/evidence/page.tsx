@@ -18,6 +18,12 @@ function isHttpUrl(raw: string) {
   }
 }
 
+function parseFloatSafe(v: unknown): number | null {
+  const n = Number(String(v ?? "").trim());
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
 export default async function EvidencePage() {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
   if (!env.featureEvidenceIngest) {
@@ -72,6 +78,13 @@ export default async function EvidencePage() {
     const summary = String(formData.get("summary") ?? "").trim() || null;
     const contentText = String(formData.get("contentText") ?? "").trim() || null;
 
+    const geoLat = parseFloatSafe(formData.get("geoLat"));
+    const geoLon = parseFloatSafe(formData.get("geoLon"));
+    const geo =
+      geoLat !== null && geoLon !== null && geoLat >= -90 && geoLat <= 90 && geoLon >= -180 && geoLon <= 180
+        ? { lat: geoLat, lon: geoLon }
+        : null;
+
     const tags = String(formData.get("tags") ?? "")
       .split(",")
       .map((t) => t.trim())
@@ -102,6 +115,7 @@ export default async function EvidencePage() {
           contentText: contentText ?? existing.contentText,
           tags: Array.from(new Set([...(existing.tags ?? []), ...tags])),
           sourceType: "manual",
+          metadata: geo ? { ...((existing.metadata as any) ?? {}), geo } : existing.metadata,
         },
       });
       await tenantDb.auditLog.create({
@@ -143,7 +157,7 @@ export default async function EvidencePage() {
         contentText,
         contentHash: hash,
         tags,
-        metadata: { createdBy: membership.userId, channel: "manual" },
+        metadata: { createdBy: membership.userId, channel: "manual", ...(geo ? { geo } : {}) },
         triageStatus: "new",
         handling: "internal",
       },
@@ -272,12 +286,20 @@ export default async function EvidencePage() {
             <span className="font-semibold">{membership.role}</span>
           </div>
         </div>
-        <a
-          href="/tenants"
-          className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
-        >
-          Switch tenant
-        </a>
+        <div className="flex gap-2">
+          <a
+            href="/geofences"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Geofences
+          </a>
+          <a
+            href="/tenants"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Switch tenant
+          </a>
+        </div>
       </div>
 
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
@@ -306,6 +328,22 @@ export default async function EvidencePage() {
             <input
               name="tags"
               placeholder="e.g. cisa, healthcare, vendor"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Geo lat (optional)</label>
+            <input
+              name="geoLat"
+              placeholder="38.8977"
+              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400">Geo lon (optional)</label>
+            <input
+              name="geoLon"
+              placeholder="-77.0365"
               className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
             />
           </div>
