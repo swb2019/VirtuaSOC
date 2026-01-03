@@ -40,6 +40,9 @@ COPY --from=build /repo/package.json ./package.json
 COPY --from=build /repo/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build /repo/apps/worker/dist ./apps/worker/dist
 
+# Tenant SQL migrations (source of truth shared with API/Factory).
+COPY --from=build /repo/apps/api/migrations-tenant ./apps/api/migrations-tenant
+
 COPY --from=build /repo/packages/core/package.json ./packages/core/package.json
 COPY --from=build /repo/packages/core/dist ./packages/core/dist
 

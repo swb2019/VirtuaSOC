@@ -23,6 +23,9 @@ COPY --from=build /repo/apps/factory/public ./apps/factory/public
 # Prisma client output is generated into the repo under apps/factory/src/generated/* (linux binaries in build stage).
 COPY --from=build /repo/apps/factory/src/generated ./apps/factory/src/generated
 
+# Tenant SQL migrations are the source of truth (shared with the API/worker).
+COPY --from=build /repo/apps/api/migrations-tenant ./apps/api/migrations-tenant
+
 EXPOSE 3000
 WORKDIR /repo/apps/factory
 

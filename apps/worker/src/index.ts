@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 
 import { Queue, Worker } from "bullmq";
 
@@ -13,6 +14,7 @@ import { runAutoSitrep, type AutoSitrepJobPayload } from "./reports/autoSitrep.j
 import { distributeReport, type DistributeReportJobPayload } from "./reports/distributeReport.js";
 import { generateProduct, type GenerateProductJobPayload } from "./products/generateProduct.js";
 import { distributeProduct, type DistributeProductJobPayload } from "./products/distributeProduct.js";
+import { runSqlMigrations } from "./migrations/migrator.js";
 
 const DEFAULT_RSS_FEEDS = [
   "https://www.cisa.gov/uscert/ncas/alerts.xml",
@@ -33,6 +35,13 @@ async function tenantDbFor(tenantId: string): Promise<Db> {
   const cached = tenantDbCache.get(tenantId);
   if (cached) return cached;
   const dsn = await getTenantDbDsn(controlDb, tenantId, config.tenantDsnEncryptionKey);
+
+  // Keep tenant DB schemas up to date automatically (safe for our budget-mode single replica).
+  if ((process.env.AUTO_MIGRATE_TENANT ?? "true") !== "false") {
+    const dir = resolve(process.cwd(), "apps/api/migrations-tenant");
+    await runSqlMigrations(dsn, dir);
+  }
+
   const db = createDb(dsn);
   tenantDbCache.set(tenantId, db);
   return db;
