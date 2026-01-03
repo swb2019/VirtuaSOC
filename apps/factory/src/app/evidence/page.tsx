@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
 import { computeEvidenceHash } from "@/lib/evidenceHash";
-import { getIngestQueue, JOB_SIGNALS_EVALUATE } from "@/lib/queue";
+import { getIngestQueue, JOB_EVIDENCE_ENRICH, JOB_SIGNALS_EVALUATE } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +40,18 @@ export default async function EvidencePage() {
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+
+  const evidenceIds = items.map((e) => e.id);
+  const indicatorCounts = evidenceIds.length
+    ? await tenantDb.evidenceIndicator.groupBy({
+        by: ["evidenceId"],
+        where: { tenantId: tenant.id, evidenceId: { in: evidenceIds } },
+        _count: { _all: true },
+      })
+    : [];
+  const countByEvidenceId = new Map<string, number>(
+    indicatorCounts.map((r) => [r.evidenceId, r._count._all]),
+  );
 
   const feeds = await tenantDb.rssFeed.findMany({
     where: { tenantId: tenant.id },
@@ -110,6 +122,12 @@ export default async function EvidencePage() {
         { tenantId: tenant.id, evidenceId: existing.id },
         { jobId: `sig:${tenant.id}:${existing.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
       );
+      // Trigger enrichment (idempotent on the worker side).
+      await getIngestQueue().add(
+        JOB_EVIDENCE_ENRICH,
+        { tenantId: tenant.id, evidenceId: existing.id, actorUserId: membership.userId },
+        { jobId: `enrich:${tenant.id}:${existing.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      );
       redirect("/evidence");
     }
 
@@ -148,7 +166,25 @@ export default async function EvidencePage() {
       { tenantId: tenant.id, evidenceId: created.id },
       { jobId: `sig:${tenant.id}:${created.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
     );
+    await getIngestQueue().add(
+      JOB_EVIDENCE_ENRICH,
+      { tenantId: tenant.id, evidenceId: created.id, actorUserId: membership.userId },
+      { jobId: `enrich:${tenant.id}:${created.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
 
+    redirect("/evidence");
+  }
+
+  async function enqueueEnrich(formData: FormData) {
+    "use server";
+    const { tenant, membership } = await requireTenantDb("ANALYST");
+    const evidenceId = String(formData.get("evidenceId") ?? "").trim();
+    if (!evidenceId) throw new Error("evidenceId is required");
+    await getIngestQueue().add(
+      JOB_EVIDENCE_ENRICH,
+      { tenantId: tenant.id, evidenceId, actorUserId: membership.userId },
+      { jobId: `enrich:${tenant.id}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
     redirect("/evidence");
   }
 
@@ -388,8 +424,10 @@ export default async function EvidencePage() {
             <tr>
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Source</th>
+              <th className="px-4 py-3">Indicators</th>
               <th className="px-4 py-3">Triage</th>
               <th className="px-4 py-3">Fetched</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
@@ -405,13 +443,22 @@ export default async function EvidencePage() {
                     <span className="text-zinc-500">—</span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-zinc-300">{countByEvidenceId.get(e.id) ?? 0}</td>
                 <td className="px-4 py-3 text-zinc-300">{e.triageStatus}</td>
                 <td className="px-4 py-3 text-zinc-400">{new Date(e.fetchedAt).toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">
+                  <form action={enqueueEnrich}>
+                    <input type="hidden" name="evidenceId" value={e.id} />
+                    <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
+                      Enrich
+                    </button>
+                  </form>
+                </td>
               </tr>
             ))}
             {!items.length ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-zinc-400">
+                <td colSpan={6} className="px-4 py-6 text-zinc-400">
                   No evidence yet.
                 </td>
               </tr>

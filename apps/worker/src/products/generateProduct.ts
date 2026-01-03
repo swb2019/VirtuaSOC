@@ -46,6 +46,7 @@ type EvidenceRow = {
   title: string | null;
   summary: string | null;
   content_text: string | null;
+  metadata: any;
   tags: string[];
   triage_status: string | null;
 };
@@ -474,7 +475,7 @@ async function evidenceForJob(db: Db, payload: GenerateProductJobPayload, cfg: P
     if (!ids.length) return [];
 
     return await db<EvidenceRow[]>`
-      SELECT id, fetched_at, source_type, source_uri, title, summary, content_text, tags, triage_status
+      SELECT id, fetched_at, source_type, source_uri, title, summary, content_text, metadata, tags, triage_status
       FROM evidence_items
       WHERE tenant_id = ${payload.tenantId} AND id = ANY(${db.array(ids, 2950)})
       ORDER BY fetched_at DESC
@@ -484,7 +485,7 @@ async function evidenceForJob(db: Db, payload: GenerateProductJobPayload, cfg: P
 
   const { hours, maxEvidence } = parseWindow(cfg.scope ?? {});
   return await db<EvidenceRow[]>`
-    SELECT id, fetched_at, source_type, source_uri, title, summary, content_text, tags, triage_status
+    SELECT id, fetched_at, source_type, source_uri, title, summary, content_text, metadata, tags, triage_status
     FROM evidence_items
     WHERE tenant_id = ${payload.tenantId}
       AND fetched_at > NOW() - (${hours}::int * INTERVAL '1 hour')
@@ -558,13 +559,21 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
     const evidenceMap = evidence.map((e, i) => ({ ref: evidenceRef(i), evidence: e }));
     const allowedRefs = new Set(evidenceMap.map((x) => x.ref));
 
-    const evidenceForLlm = evidenceMap.map(({ ref, evidence }) => ({
-      ref,
-      title: sanitizeEvidenceText(evidence.title ?? ""),
-      summary: sanitizeEvidenceText(evidence.summary ?? ""),
-      excerpt: sanitizeEvidenceText(evidence.content_text ?? ""),
-      tags: (evidence.tags ?? []).map(String).map((t) => t.trim()).filter(Boolean).slice(0, 15),
-    }));
+    const evidenceForLlm = evidenceMap.map(({ ref, evidence }) => {
+      // Prefer a sanitized, enrichment-derived excerpt when present.
+      const enriched = evidence.metadata?.enrichment;
+      const bestExcerpt =
+        typeof enriched?.llmExcerpt === "string" && enriched.llmExcerpt.trim()
+          ? enriched.llmExcerpt
+          : evidence.content_text ?? "";
+      return {
+        ref,
+        title: sanitizeEvidenceText(evidence.title ?? ""),
+        summary: sanitizeEvidenceText(evidence.summary ?? ""),
+        excerpt: sanitizeEvidenceText(bestExcerpt),
+        tags: (evidence.tags ?? []).map(String).map((t) => t.trim()).filter(Boolean).slice(0, 15),
+      };
+    });
 
     const prior = await priorProductSummary(db, tenantId, productType);
     const requireChangeFromLast = Boolean(prior);

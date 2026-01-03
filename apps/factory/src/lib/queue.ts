@@ -4,6 +4,7 @@ import { env, requireEnv } from "@/env";
 
 export const QUEUE_INGEST = "ingest";
 export const JOB_SIGNALS_EVALUATE = "signals.evaluate";
+export const JOB_EVIDENCE_ENRICH = "evidence.enrich";
 export const JOB_PRODUCTS_GENERATE = "products.generate";
 export const JOB_PRODUCTS_DISTRIBUTE = "products.distribute";
 

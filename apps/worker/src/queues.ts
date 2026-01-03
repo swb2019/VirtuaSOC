@@ -8,6 +8,7 @@ export const JOBS = {
   autoSitrep: "reports.auto_sitrep",
   distributeReport: "reports.distribute",
   evaluateSignal: "signals.evaluate",
+  enrichEvidence: "evidence.enrich",
   generateProduct: "products.generate",
   distributeProduct: "products.distribute",
 } as const;

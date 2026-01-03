@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { FastifyPluginAsync } from "fastify";
+import { Queue } from "bullmq";
 
 import { requireRole } from "../auth/guards.js";
 import { writeAudit } from "../audit.js";
@@ -22,6 +23,8 @@ function headerStringCsv(req: any, name: string): string[] {
 }
 
 export const ingestWebhookRoutes: FastifyPluginAsync = async (app) => {
+  const ingestQueue = app.config.redisUrl ? new Queue("ingest", { connection: { url: app.config.redisUrl } }) : null;
+
   // Tenant-scoped webhook ingestion.
   //
   // Auth: requires a normal VirtuaSOC bearer token (OIDC/local), same as other tenant routes.
@@ -126,6 +129,16 @@ export const ingestWebhookRoutes: FastifyPluginAsync = async (app) => {
       inserted: saved.inserted,
       tagCount: tags.length,
     });
+
+    // Best-effort: kick off enrichment asynchronously (URL fetch + IOC extraction).
+    // If Redis is not configured, enrichment can still be triggered via other paths (factory/manual, RSS, etc.).
+    if (ingestQueue) {
+      await ingestQueue.add(
+        "evidence.enrich",
+        { tenantId: tenant.id, evidenceId: saved.id, actorUserId: actor.sub },
+        { jobId: `enrich:${tenant.id}:${saved.id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      );
+    }
 
     return reply.code(saved.inserted ? 201 : 200).send({ id: saved.id, inserted: saved.inserted });
   });

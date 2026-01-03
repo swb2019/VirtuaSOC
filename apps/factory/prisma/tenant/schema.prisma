@@ -30,12 +30,33 @@ model EvidenceItem {
 
   entityLinks EvidenceEntityLink[]
   signalLinks SignalEvidenceLink[]
+  indicators  EvidenceIndicator[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
   @@index([tenantId, sourceUri])
   @@index([tenantId, contentHash])
   @@map("evidence_items")
+}
+
+model EvidenceIndicator {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+
+  evidenceId String @db.Uuid @map("evidence_id")
+  evidence   EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  kind            String
+  value           String
+  normalizedValue String @map("normalized_value")
+  source          String @default("text")
+  metadata        Json   @default("{}")
+
+  @@unique([tenantId, evidenceId, kind, normalizedValue])
+  @@index([tenantId, kind, normalizedValue])
+  @@index([tenantId, evidenceId, createdAt(sort: Desc)])
+  @@map("evidence_indicators")
 }
 
 model Entity {

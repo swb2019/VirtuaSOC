@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { FastifyPluginAsync } from "fastify";
+import { Queue } from "bullmq";
 
 import { requireRole } from "../auth/guards.js";
 import { writeAudit } from "../audit.js";
@@ -21,6 +22,8 @@ type EvidenceRow = {
 };
 
 export const evidenceRoutes: FastifyPluginAsync = async (app) => {
+  const ingestQueue = app.config.redisUrl ? new Queue("ingest", { connection: { url: app.config.redisUrl } }) : null;
+
   app.get("/evidence", async (req) => {
     const tenant = req.tenant!;
     const db = req.tenantDb!;
@@ -109,6 +112,14 @@ export const evidenceRoutes: FastifyPluginAsync = async (app) => {
       sourceType: b.sourceType,
       sourceUri: b.sourceUri,
     });
+
+    if (ingestQueue) {
+      await ingestQueue.add(
+        "evidence.enrich",
+        { tenantId: tenant.id, evidenceId: id, actorUserId: actor.sub },
+        { jobId: `enrich:${tenant.id}:${id}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      );
+    }
 
     return reply.code(201).send({ id });
   });

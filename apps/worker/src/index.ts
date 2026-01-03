@@ -8,6 +8,7 @@ import { createDb, type Db } from "./db.js";
 import { ingestRssFeed, type IngestRssJobPayload } from "./ingest/rss.js";
 import { runRetentionCleanup, type RetentionCleanupJobPayload } from "./maintenance/retentionCleanup.js";
 import { JOBS, QUEUES } from "./queues.js";
+import { enrichEvidence, type EnrichEvidenceJobPayload } from "./evidence/enrichEvidence.js";
 import { evaluateSignal, type EvaluateSignalJobPayload } from "./signals/evaluateSignal.js";
 import { getTenantDbDsn, listTenants } from "./tenancy/controlPlane.js";
 import { runAutoSitrep, type AutoSitrepJobPayload } from "./reports/autoSitrep.js";
@@ -144,6 +145,11 @@ async function main() {
             { tenantId: payload.tenantId, evidenceId } satisfies EvaluateSignalJobPayload,
             { jobId: `sig:${payload.tenantId}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
           );
+          await ingestQueue.add(
+            JOBS.enrichEvidence,
+            { tenantId: payload.tenantId, evidenceId } satisfies EnrichEvidenceJobPayload,
+            { jobId: `enrich:${payload.tenantId}:${evidenceId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+          );
         }
         return;
       }
@@ -169,6 +175,12 @@ async function main() {
         const payload = job.data as EvaluateSignalJobPayload;
         const tenantDb = await tenantDbFor(payload.tenantId);
         await evaluateSignal(tenantDb, payload);
+        return;
+      }
+      if (job.name === JOBS.enrichEvidence) {
+        const payload = job.data as EnrichEvidenceJobPayload;
+        const tenantDb = await tenantDbFor(payload.tenantId);
+        await enrichEvidence(tenantDb, payload);
         return;
       }
       if (job.name === JOBS.generateProduct) {
