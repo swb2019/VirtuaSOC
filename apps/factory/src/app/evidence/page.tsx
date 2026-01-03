@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
@@ -433,7 +434,11 @@ export default async function EvidencePage() {
           <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
             {items.map((e) => (
               <tr key={e.id} className="hover:bg-zinc-900/40">
-                <td className="px-4 py-3 font-semibold text-zinc-100">{e.title ?? e.id}</td>
+                <td className="px-4 py-3 font-semibold text-zinc-100">
+                  <Link className="hover:underline" href={`/evidence/${e.id}`}>
+                    {e.title ?? e.id}
+                  </Link>
+                </td>
                 <td className="px-4 py-3">
                   {e.sourceUri ? (
                     <a className="text-sky-300 hover:underline" href={e.sourceUri} target="_blank" rel="noreferrer">
@@ -443,7 +448,11 @@ export default async function EvidencePage() {
                     <span className="text-zinc-500">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-zinc-300">{countByEvidenceId.get(e.id) ?? 0}</td>
+                <td className="px-4 py-3 text-zinc-300">
+                  <Link className="hover:underline" href={`/evidence/${e.id}`}>
+                    {countByEvidenceId.get(e.id) ?? 0}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-zinc-300">{e.triageStatus}</td>
                 <td className="px-4 py-3 text-zinc-400">{new Date(e.fetchedAt).toLocaleString()}</td>
                 <td className="px-4 py-3 text-right">
