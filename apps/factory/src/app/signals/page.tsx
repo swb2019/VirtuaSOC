@@ -134,6 +134,34 @@ export default async function SignalsPage() {
                           : "—"}
                       </span>
                     </div>
+                  ) : s.kind === "route_corridor" ? (
+                    <div className="mt-2 text-xs text-zinc-300">
+                      <span className="rounded-md border border-zinc-800 bg-black/20 px-2 py-1">
+                        route:{" "}
+                        {(() => {
+                          const rid = String((s.metadata as any)?.routeEntityId ?? "");
+                          const rname = String((s.metadata as any)?.routeName ?? "—");
+                          if (!rid) return rname;
+                          return (
+                            <a className="text-sky-300 hover:underline" href={`/entities/${encodeURIComponent(rid)}`}>
+                              {rname}
+                            </a>
+                          );
+                        })()}
+                        {" • "}
+                        {typeof (s.metadata as any)?.distanceKm === "number"
+                          ? `${(s.metadata as any).distanceKm.toFixed(2)} km`
+                          : "dist=—"}
+                        {" • "}
+                        {typeof (s.metadata as any)?.corridorKm === "number"
+                          ? `corridor=${(s.metadata as any).corridorKm.toFixed(1)} km`
+                          : "corridor=—"}
+                        {" • "}
+                        {typeof (s.metadata as any)?.closestSegmentIndex === "number"
+                          ? `seg=${(s.metadata as any).closestSegmentIndex}`
+                          : "seg=—"}
+                      </span>
+                    </div>
                   ) : null}
               </div>
               <div className="flex items-center gap-2">
