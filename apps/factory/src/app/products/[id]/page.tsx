@@ -62,6 +62,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     })
     .catch(() => []);
 
+  // Quality score (best-on-market rubric signal), written by the worker into contentJson.
+  const quality = (product.contentJson as any)?.quality ?? null;
+
   async function submitForReview() {
     "use server";
     if (!env.featureReviewDistribution) throw new Error("M6 (Review + distribution) is not enabled");
@@ -292,6 +295,59 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           ) : null}
         </div>
       </div>
+
+      {quality ? (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-200">Quality score</div>
+              <div className="mt-1 text-xs text-zinc-500">
+                rubric v{String(quality.version ?? "—")} • generatedAt {String(quality.generatedAt ?? "—")}
+              </div>
+            </div>
+            <div
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                quality.passed ? "border-emerald-900/60 bg-emerald-950/30 text-emerald-200" : "border-rose-900/60 bg-rose-950/30 text-rose-200"
+              }`}
+            >
+              {quality.passed ? "PASS" : "FAIL"}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-zinc-800 bg-black/20 p-4 text-xs text-zinc-200">
+              <div className="font-semibold text-zinc-300">Evidence refs</div>
+              <div className="mt-2">
+                provided: <span className="font-mono">{String(quality.metrics?.evidenceRefsProvided ?? "—")}</span>
+              </div>
+              <div className="mt-1">
+                used: <span className="font-mono">{String(quality.metrics?.evidenceRefsUsed ?? "—")}</span>
+              </div>
+              <div className="mt-1 text-zinc-400">Strict mode ensures provided==used for DIS.</div>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-black/20 p-4 text-xs text-zinc-200">
+              <div className="font-semibold text-zinc-300">Key judgments</div>
+              <div className="mt-2">
+                total: <span className="font-mono">{String(quality.metrics?.keyJudgments ?? "—")}</span>
+              </div>
+              <div className="mt-1">
+                cited: <span className="font-mono">{String(quality.metrics?.keyJudgmentsWithCitations ?? "—")}</span>
+              </div>
+              <div className="mt-1 text-zinc-400">Each KJ must cite at least one EVD ref (DIS).</div>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-black/20 p-4 text-xs text-zinc-200">
+              <div className="font-semibold text-zinc-300">Violations</div>
+              <div className="mt-2">
+                urls: <span className="font-mono">{String(quality.violations?.urls ?? "—")}</span>
+              </div>
+              <div className="mt-1">
+                forbiddenTerms: <span className="font-mono">{String(quality.violations?.forbiddenTermsInNarrative ?? "—")}</span>
+              </div>
+              <div className="mt-1 text-zinc-400">Tradecraft violations are blocked at validation time.</div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">

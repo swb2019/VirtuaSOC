@@ -42,6 +42,7 @@ export default async function ReviewQueuePage() {
             <tr>
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Quality</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -51,6 +52,31 @@ export default async function ReviewQueuePage() {
               <tr key={p.id}>
                 <td className="px-4 py-3 font-semibold text-zinc-100">{p.title}</td>
                 <td className="px-4 py-3 font-mono text-xs text-zinc-200">{p.productType}</td>
+                <td className="px-4 py-3 text-xs">
+                  {(() => {
+                    const q = (p.contentJson as any)?.quality ?? null;
+                    if (!q) return <span className="text-zinc-500">—</span>;
+                    const passed = Boolean(q.passed);
+                    const kj = Number(q.metrics?.keyJudgments ?? NaN);
+                    const cited = Number(q.metrics?.keyJudgmentsWithCitations ?? NaN);
+                    return (
+                      <div className="space-y-1">
+                        <span
+                          className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${
+                            passed
+                              ? "border-emerald-900/60 bg-emerald-950/30 text-emerald-200"
+                              : "border-rose-900/60 bg-rose-950/30 text-rose-200"
+                          }`}
+                        >
+                          {passed ? "PASS" : "FAIL"}
+                        </span>
+                        {Number.isFinite(kj) && Number.isFinite(cited) ? (
+                          <div className="text-zinc-400">KJ cited {cited}/{kj}</div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-3 text-zinc-400">{new Date(p.createdAt).toLocaleString()}</td>
                 <td className="px-4 py-3 text-right">
                   <a
@@ -64,7 +90,7 @@ export default async function ReviewQueuePage() {
             ))}
             {!items.length ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-zinc-400">
+                <td colSpan={5} className="px-4 py-6 text-zinc-400">
                   No products in review.
                 </td>
               </tr>

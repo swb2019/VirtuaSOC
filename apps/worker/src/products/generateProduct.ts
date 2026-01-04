@@ -78,6 +78,11 @@ function evidenceRef(i: number): string {
   return `EVD-${n}`;
 }
 
+function extractEvidenceRefs(text: string): string[] {
+  const matches = String(text ?? "").match(/\bEVD-\d{3}\b/g);
+  return matches ? Array.from(new Set(matches)) : [];
+}
+
 function computeConfidence(evidence: EvidenceRow[]): { level: ConfidenceLevel; rationale: string } {
   const count = evidence.length;
   const hosts = new Set<string>();
@@ -734,6 +739,41 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
     if (!validated.ok) throw new Error(`LLM output invalid: ${validated.error}`);
     const gen: GeneratedProductJson = validated.value;
 
+    // Quality score: persisted for best-on-market DIS (and usable for other product types).
+    const usedRefs = new Set<string>([
+      ...gen.keyJudgments.flatMap((s) => extractEvidenceRefs(s)),
+      ...extractEvidenceRefs(gen.bodyMarkdown),
+      ...(gen.changeFromLast ? extractEvidenceRefs(gen.changeFromLast) : []),
+    ]);
+    const providedRefs = new Set<string>(gen.evidenceRefs);
+    const kjWithCitations = gen.keyJudgments.filter((s) => extractEvidenceRefs(s).length > 0).length;
+
+    const quality = {
+      version: 1,
+      productType: cfg.product_type,
+      passed: true,
+      generatedAt: new Date().toISOString(),
+      rubric: {
+        requireKeyJudgmentEvidenceRefs: Boolean(validateOptions.requireKeyJudgmentEvidenceRefs),
+        requireEvidenceRefsMatchUsed: Boolean(validateOptions.requireEvidenceRefsMatchUsed),
+      },
+      metrics: {
+        evidenceProvided: evidenceMap.length,
+        evidenceRefsProvided: providedRefs.size,
+        evidenceRefsUsed: usedRefs.size,
+        keyJudgments: gen.keyJudgments.length,
+        keyJudgmentsWithCitations: kjWithCitations,
+      },
+      refs: {
+        provided: Array.from(providedRefs).sort(),
+        used: Array.from(usedRefs).sort(),
+      },
+      violations: {
+        urls: 0,
+        forbiddenTermsInNarrative: 0,
+      },
+    } as const;
+
     // Evidence-bound enforcement: map evidenceRefs back to UUIDs.
     const refToId = new Map<string, string>(evidenceMap.map((x) => [x.ref, x.evidence.id]));
     const evidenceIds = Array.from(
@@ -799,6 +839,7 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
             generated: gen,
             evidenceRefMap: evidenceMap.map((x) => ({ ref: x.ref, evidenceId: x.evidence.id })),
             requireReview,
+            quality,
           })},
           ${tx.array(evidenceIds, 2950)},
           ${tx.array(entityIds, 2950)},
@@ -837,6 +878,7 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
             evidenceCount: evidenceIds.length,
             entityCount: entityIds.length,
             confidence: conf,
+            quality: { passed: quality.passed, metrics: quality.metrics },
           })}
         )
       `;
@@ -847,7 +889,7 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
       SET status = ${"succeeded"},
           model = ${provider === "openai" ? (process.env.OPENAI_MODEL ?? "gpt-5.2") : "mock"},
           prompt_version_id = ${cfg.prompt_version_id},
-          output = ${db.json({ productId, productType: cfg.product_type, requireReview })}
+          output = ${db.json({ productId, productType: cfg.product_type, requireReview, quality })}
       WHERE id = ${runId}
     `;
 
