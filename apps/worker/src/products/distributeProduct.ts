@@ -329,11 +329,21 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
     const markdown = product.content_markdown?.trim() || "";
     if (!markdown) throw new Error("Product has no rendered markdown");
 
-    // Determine which exports to produce.
+    // Determine targets + distribution rules before deciding exports.
+    // - renderOnly: honor payload.exportFormats (default pdf if none provided)
+    // - distribute: always export PDF; export DOCX only if enabled by rules AND there's an email target selected
+    const targets = payload.renderOnly ? [] : await listTargets(db, tenantId, payload.distributionTargetIds);
+    if (!payload.renderOnly && !targets.length) throw new Error("No enabled distribution targets selected");
+
+    const rules = await loadProductDistributionRules(db, tenantId, product.product_type);
+    const includeDocxEmailAttachment = Boolean(rules?.includeDocxEmailAttachment);
+    const hasEmailTarget = targets.some((t) => t.kind === "email");
+
     const requested = Array.isArray(payload.exportFormats) ? payload.exportFormats.map(String) : [];
     const exportFormats = Array.from(new Set(requested)).filter((x) => x === "pdf" || x === "docx");
-    const shouldExportPdf = !payload.renderOnly || exportFormats.length === 0 || exportFormats.includes("pdf");
-    const shouldExportDocx = exportFormats.includes("docx");
+
+    const shouldExportPdf = payload.renderOnly ? (exportFormats.length === 0 || exportFormats.includes("pdf")) : true;
+    const shouldExportDocx = payload.renderOnly ? exportFormats.includes("docx") : includeDocxEmailAttachment && hasEmailTarget;
 
     const tenantTemplate = shouldExportDocx ? await loadTenantDocxTemplate(db, tenantId) : null;
 
@@ -369,12 +379,7 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
       return;
     }
 
-    const targets = await listTargets(db, tenantId, payload.distributionTargetIds);
-    if (!targets.length) throw new Error("No enabled distribution targets selected");
-
     const smtp = getSmtpConfig();
-    const rules = await loadProductDistributionRules(db, tenantId, product.product_type);
-    const includeDocxEmailAttachment = Boolean(rules?.includeDocxEmailAttachment);
 
     let anyFailed = false;
     for (const t of targets) {
