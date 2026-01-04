@@ -35,18 +35,26 @@ else
 fi
 
 if [[ -n "$SHA_EXPECTED" ]]; then
-  echo "[4/7] Wait for factory image tag to be pullable: $SHA_EXPECTED"
-  FACTORY_IMAGE="ghcr.io/swb2019/virtuasoc-factory:${SHA_EXPECTED}"
-  for i in $(seq 1 90); do
-    if $CRICTL pull "$FACTORY_IMAGE" >/dev/null 2>&1; then
-      echo "  - Factory image is pullable"
-      break
-    fi
-    if [[ "$i" -eq 90 ]]; then
-      echo "ERROR: Factory image still not pullable after waiting. Check GitHub Actions + GHCR visibility."
-      exit 1
-    fi
-    sleep 10
+  echo "[4/7] Wait for image tags to be pullable: $SHA_EXPECTED"
+  IMAGES=(
+    "ghcr.io/swb2019/virtuasoc-factory:${SHA_EXPECTED}"
+    "ghcr.io/swb2019/virtuasoc-worker:${SHA_EXPECTED}"
+  )
+
+  for IMG in "${IMAGES[@]}"; do
+    echo "  - Waiting for: $IMG"
+    for i in $(seq 1 90); do
+      if $CRICTL pull "$IMG" >/dev/null 2>&1; then
+        echo "    - OK"
+        break
+      fi
+      if [[ "$i" -eq 90 ]]; then
+        echo "ERROR: Image still not pullable after waiting: $IMG"
+        echo "Check GitHub Actions + GHCR visibility."
+        exit 1
+      fi
+      sleep 10
+    done
   done
 else
   echo "[4/7] No SHA_EXPECTED provided; skipping image wait/pin"
@@ -57,6 +65,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 HELM_ARGS=(upgrade --install "$RELEASE" infra/k8s/helm/virtuasoc --namespace "$NAMESPACE" -f "$VALUES_FILE")
 if [[ -n "$SHA_EXPECTED" ]]; then
   HELM_ARGS+=(--set "image.factory.tag=${SHA_EXPECTED}")
+  HELM_ARGS+=(--set "image.worker.tag=${SHA_EXPECTED}")
 fi
 helm "${HELM_ARGS[@]}"
 
