@@ -13,8 +13,96 @@ function contentHash(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
+type Geo = { lat: number; lon: number };
+
+function parseGeoPoint(raw: unknown): Geo | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s) return null;
+
+  // GeoRSS point is usually "lat lon" (space-separated). Some feeds use "lat,lon".
+  const parts = s.includes(",") ? s.split(",") : s.split(/\s+/);
+  if (parts.length < 2) return null;
+  const lat = Number(parts[0]);
+  const lon = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90) return null;
+  if (lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+function normalizeTag(raw: string): string | null {
+  const t = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!t) return null;
+  return t.slice(0, 40);
+}
+
+const ALLOWED_CATEGORY_TAGS = new Set<string>([
+  "protest",
+  "demonstration",
+  "violence",
+  "shooting",
+  "arson",
+  "fire",
+  "bomb",
+  "bomb_threat",
+  "strike",
+  "union",
+  "disruption",
+  "closure",
+  "activism",
+  "boycott",
+  "regulatory",
+  "investigation",
+  "cargo_theft",
+  "theft",
+  "hijacking",
+  "robbery",
+  "road_closure",
+  "accident",
+  "crash",
+  "port",
+  "rail",
+  "airport",
+  "weather",
+]);
+
+function tagsFromCategories(categories: unknown): string[] {
+  const raw = Array.isArray(categories) ? categories.map(String) : [];
+  const mapped = raw
+    .map((c) => normalizeTag(c))
+    .filter((x): x is string => Boolean(x))
+    .map((t) => (t === "demonstrations" ? "demonstration" : t))
+    .map((t) => (t === "protests" ? "protest" : t))
+    .filter((t) => ALLOWED_CATEGORY_TAGS.has(t));
+  return Array.from(new Set(mapped));
+}
+
+function geoFromItem(item: any): { geo: Geo; source: string } | null {
+  // GeoRSS
+  const georss = parseGeoPoint(item?.["georss:point"]);
+  if (georss) return { geo: georss, source: "georss:point" };
+
+  // W3C geo
+  const lat = Number(item?.["geo:lat"] ?? item?.["geo:latitude"] ?? NaN);
+  const lon = Number(item?.["geo:long"] ?? item?.["geo:lon"] ?? item?.["geo:longitude"] ?? NaN);
+  if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+    return { geo: { lat, lon }, source: "geo:lat/long" };
+  }
+
+  return null;
+}
+
 export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
-  const parser = new Parser();
+  const parser = new Parser({
+    customFields: {
+      item: ["georss:point", "geo:lat", "geo:long", "geo:lon"],
+    } as any,
+  });
   const feed = await parser.parseURL(payload.feedUrl);
 
   const now = new Date().toISOString();
@@ -48,13 +136,29 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
     const text = `${title ?? ""}\n\n${content}`;
     const hash = contentHash(text);
 
+    const geoFound = geoFromItem(item as any);
+    const geo = geoFound?.geo ?? null;
+    const categoryTags = tagsFromCategories((item as any)?.categories);
+    const tags = Array.from(new Set([...(defaultTags ?? []), ...categoryTags]));
+
+    const metadata = {
+      ...(geo ? { geo } : {}),
+      ...(geoFound?.source ? { geoSource: geoFound.source } : {}),
+      rss: {
+        feedUrl: payload.feedUrl,
+        feedTitle: feed.title ?? null,
+        itemGuid: (item as any)?.guid ?? null,
+        categories: Array.isArray((item as any)?.categories) ? (item as any).categories : [],
+      },
+    } as Record<string, unknown>;
+
     // Dedup by (tenant_id, source_uri) unique index
     if (link) {
       const id = randomUUID();
       try {
         const rows = await db<{ id: string }[]>`
           INSERT INTO evidence_items (
-            id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags, triage_status
+            id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags, triage_status, metadata
           ) VALUES (
             ${id},
             ${payload.tenantId},
@@ -65,8 +169,10 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
             ${summary},
             ${content},
             ${hash},
-            ${db.array(defaultTags, 1009)},
+            ${db.array(tags, 1009)},
             ${autoTriage}
+            ,
+            ${db.json(metadata)}
           )
           ON CONFLICT (tenant_id, source_uri) DO NOTHING
           RETURNING id
@@ -81,7 +187,7 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
         try {
           const rows = await db<{ id: string }[]>`
             INSERT INTO evidence_items (
-              id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags
+              id, tenant_id, fetched_at, source_type, source_uri, title, summary, content_text, content_hash, tags, metadata
             ) VALUES (
               ${id},
               ${payload.tenantId},
@@ -92,7 +198,8 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
               ${summary},
               ${content},
               ${hash},
-              ${db.array(defaultTags, 1009)}
+              ${db.array(tags, 1009)},
+              ${db.json(metadata)}
             )
             ON CONFLICT (tenant_id, source_uri) DO NOTHING
             RETURNING id
@@ -109,7 +216,7 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
         const id = randomUUID();
         const rows = await db<{ id: string }[]>`
           INSERT INTO evidence_items (
-            id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags, triage_status
+            id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags, triage_status, metadata
           ) VALUES (
             ${id},
             ${payload.tenantId},
@@ -119,8 +226,10 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
             ${summary},
             ${content},
             ${hash},
-            ${db.array(defaultTags, 1009)},
+            ${db.array(tags, 1009)},
             ${autoTriage}
+            ,
+            ${db.json(metadata)}
           )
           RETURNING id
         `;
@@ -133,7 +242,7 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
         try {
           const rows = await db<{ id: string }[]>`
             INSERT INTO evidence_items (
-              id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags
+              id, tenant_id, fetched_at, source_type, title, summary, content_text, content_hash, tags, metadata
             ) VALUES (
               ${id},
               ${payload.tenantId},
@@ -143,7 +252,8 @@ export async function ingestRssFeed(db: Db, payload: IngestRssJobPayload) {
               ${summary},
               ${content},
               ${hash},
-              ${db.array(defaultTags, 1009)}
+              ${db.array(tags, 1009)},
+              ${db.json(metadata)}
             )
             RETURNING id
           `;
