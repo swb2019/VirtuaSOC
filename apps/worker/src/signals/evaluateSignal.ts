@@ -218,6 +218,12 @@ type GeofenceRow = {
   metadata: any;
 };
 
+type RouteEntityRow = {
+  id: string;
+  name: string;
+  metadata: any;
+};
+
 export function scoreFromFacilityReputationTags(tags: string[]): { score: number; reasons: string[] } {
   const t = new Set(tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean));
   let score = 0;
@@ -252,6 +258,98 @@ export function scoreFromDistanceKm(distanceKm: number): { score: number; reason
   if (distanceKm <= 10) return { score: 20, reason: "distance<=10km (+20)" };
   if (distanceKm <= 25) return { score: 10, reason: "distance<=25km (+10)" };
   return { score: 0, reason: "distance>25km (+0)" };
+}
+
+function scoreFromRouteTags(tags: string[]): { score: number; reasons: string[] } {
+  const t = new Set(tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean));
+  let score = 0;
+  const reasons: string[] = [];
+
+  const add = (pts: number, reason: string) => {
+    score += pts;
+    reasons.push(`${reason} (+${pts})`);
+  };
+
+  // Transportation / travel disruptions (examples; tune later per tenant).
+  if (t.has("cargo_theft") || t.has("theft")) add(25, "tag=cargo_theft");
+  if (t.has("hijacking") || t.has("robbery")) add(30, "tag=hijacking_or_robbery");
+  if (t.has("road_closure") || t.has("closure")) add(15, "tag=closure");
+  if (t.has("accident") || t.has("crash")) add(15, "tag=accident");
+  if (t.has("port") && (t.has("disruption") || t.has("closure"))) add(20, "tag=port_disruption");
+  if (t.has("rail") && (t.has("disruption") || t.has("closure"))) add(20, "tag=rail_disruption");
+  if (t.has("airport") && (t.has("disruption") || t.has("closure"))) add(20, "tag=airport_disruption");
+
+  // Reuse a few facility/security tags for corridor events too.
+  if (t.has("protest") || t.has("demonstration")) add(15, "tag=protest");
+  if (t.has("violence") || t.has("assault")) add(20, "tag=violence");
+  if (t.has("shooting")) add(30, "tag=shooting");
+
+  return { score, reasons };
+}
+
+function kmPerDegreeLat(): number {
+  return 110.574; // approx
+}
+
+function kmPerDegreeLonAtLat(lat: number): number {
+  return 111.32 * Math.cos((lat * Math.PI) / 180);
+}
+
+function pointToSegmentDistanceKm(
+  p: GeoPoint,
+  a: [number, number], // [lon,lat]
+  b: [number, number], // [lon,lat]
+): number {
+  const kmLon = kmPerDegreeLonAtLat(p.lat);
+  const kmLat = kmPerDegreeLat();
+
+  const px = (p.lon - a[0]) * kmLon;
+  const py = (p.lat - a[1]) * kmLat;
+  const bx = (b[0] - a[0]) * kmLon;
+  const by = (b[1] - a[1]) * kmLat;
+
+  const denom = bx * bx + by * by;
+  if (!Number.isFinite(denom) || denom <= 0) return Math.hypot(px, py);
+
+  const t = Math.max(0, Math.min(1, (px * bx + py * by) / denom));
+  const cx = bx * t;
+  const cy = by * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function pointToPolylineDistanceKm(
+  p: GeoPoint,
+  coords: [number, number][], // [lon,lat]
+): { distanceKm: number; segmentIndex: number } {
+  let best = Infinity;
+  let bestIdx = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = coords[i]!;
+    const b = coords[i + 1]!;
+    const d = pointToSegmentDistanceKm(p, a, b);
+    if (d < best) {
+      best = d;
+      bestIdx = i;
+    }
+  }
+  return { distanceKm: best, segmentIndex: bestIdx };
+}
+
+function routeFromMetadata(meta: any): { coords: [number, number][]; corridorKm: number } | null {
+  const g = meta?.routeGeometry;
+  if (!g || typeof g !== "object") return null;
+  if (g.type !== "LineString") return null;
+  const coordsRaw = Array.isArray(g.coordinates) ? g.coordinates : null;
+  if (!coordsRaw?.length) return null;
+
+  const coords: [number, number][] = coordsRaw
+    .map((p: any) => [Number(p?.[0] ?? NaN), Number(p?.[1] ?? NaN)] as [number, number])
+    .filter((p: [number, number]) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (coords.length < 2) return null;
+
+  const corridorKmRaw = Number(meta?.corridorKm ?? 5);
+  const corridorKm = Number.isFinite(corridorKmRaw) ? Math.max(0.1, Math.min(500, corridorKmRaw)) : 5;
+  return { coords, corridorKm };
 }
 
 async function alreadyHasSignalKind(db: Db, tenantId: string, evidenceId: string, kind: string): Promise<boolean> {
@@ -451,6 +549,129 @@ export async function evaluateSignal(db: Db, payload: EvaluateSignalJobPayload):
             created.push({ id: signalId, kind: "facility_geofence", severity, score });
           }
         });
+      }
+
+      // 3) Route corridor signals (travelers + product transportation)
+      let routes: RouteEntityRow[] = [];
+      try {
+        routes = await db<RouteEntityRow[]>`
+          SELECT id, name, metadata
+          FROM entities
+          WHERE tenant_id = ${payload.tenantId} AND type = ${"ROUTE"}
+          ORDER BY created_at DESC
+          LIMIT 1000
+        `;
+      } catch {
+        routes = [];
+      }
+
+      const parsedRoutes = routes
+        .map((r) => {
+          const parsed = routeFromMetadata(r.metadata);
+          if (!parsed) return null;
+          return { route: r, coords: parsed.coords, corridorKm: parsed.corridorKm };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      if (parsedRoutes.length) {
+        const matches = parsedRoutes
+          .map((r) => {
+            const d = pointToPolylineDistanceKm(evGeo, r.coords);
+            return { route: r.route, corridorKm: r.corridorKm, distanceKm: d.distanceKm, segmentIndex: d.segmentIndex };
+          })
+          .filter((m) => Number.isFinite(m.distanceKm) && m.distanceKm <= m.corridorKm);
+
+        if (matches.length) {
+          await db.begin(async (tx) => {
+            for (const m of matches) {
+              const route = m.route;
+              const distanceKm = m.distanceKm;
+              const corridorKm = m.corridorKm;
+              const closestSegmentIndex = m.segmentIndex;
+
+              const matchId = randomUUID();
+              let inserted = false;
+              try {
+                const rows = await tx<{ id: string }[]>`
+                  INSERT INTO route_corridor_matches (
+                    id, tenant_id, route_entity_id, evidence_id, distance_km, closest_segment_index
+                  ) VALUES (
+                    ${matchId},
+                    ${payload.tenantId},
+                    ${route.id},
+                    ${payload.evidenceId},
+                    ${distanceKm},
+                    ${closestSegmentIndex}
+                  )
+                  ON CONFLICT (tenant_id, route_entity_id, evidence_id) DO NOTHING
+                  RETURNING id
+                `;
+                inserted = rows.length > 0;
+              } catch (err) {
+                const msg = String((err as any)?.message ?? err);
+                if (msg.includes("relation") && msg.includes("route_corridor_matches")) return;
+                throw err;
+              }
+              if (!inserted) continue;
+
+              const distScore = scoreFromDistanceKm(distanceKm);
+              const routeTags = scoreFromRouteTags(evidenceTags);
+              const src = scoreFromSource(evidence.source_type, evidence.source_uri);
+
+              let score = distScore.score + routeTags.score + src.score;
+              score = clamp(score, 0, 100);
+              const severity = severityFromScore(score);
+
+              const reasons = [distScore.reason, ...routeTags.reasons, ...src.reasons];
+
+              const signalId = randomUUID();
+              const baseTitle = evidence.title ?? evidence.summary?.slice(0, 80) ?? "OSINT event";
+              const title = `${route.name}: ${baseTitle}`.slice(0, 180);
+
+              await tx`
+                INSERT INTO signals (
+                  id, tenant_id, kind, title, severity, score, status, rationale, metadata
+                ) VALUES (
+                  ${signalId},
+                  ${payload.tenantId},
+                  ${"route_corridor"},
+                  ${title},
+                  ${severity},
+                  ${score},
+                  ${"open"},
+                  ${tx.json({ reasons, distanceKm, corridorKm, routeEntityId: route.id, routeName: route.name, closestSegmentIndex })},
+                  ${tx.json({ routeEntityId: route.id, routeName: route.name, corridorKm, distanceKm, closestSegmentIndex })}
+                )
+              `;
+
+              await tx`
+                INSERT INTO signal_evidence_links (id, tenant_id, signal_id, evidence_id)
+                VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${payload.evidenceId})
+              `;
+
+              await tx`
+                INSERT INTO signal_entity_links (id, tenant_id, signal_id, entity_id)
+                VALUES (${randomUUID()}, ${payload.tenantId}, ${signalId}, ${route.id})
+                ON CONFLICT DO NOTHING
+              `;
+
+              await tx`
+                INSERT INTO audit_log (id, tenant_id, action, actor_user_id, target_type, target_id, metadata)
+                VALUES (
+                  ${randomUUID()},
+                  ${payload.tenantId},
+                  ${"signal.created"},
+                  ${null},
+                  ${"signal"},
+                  ${signalId},
+                  ${tx.json({ evidenceId: payload.evidenceId, kind: "route_corridor", score, severity, reasons, routeEntityId: route.id, distanceKm, corridorKm, closestSegmentIndex })}
+                )
+              `;
+
+              created.push({ id: signalId, kind: "route_corridor", severity, score });
+            }
+          });
+        }
       }
     }
   } catch (err) {
