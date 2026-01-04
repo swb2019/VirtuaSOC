@@ -346,6 +346,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               <div className="mt-1 text-zinc-400">Tradecraft violations are blocked at validation time.</div>
             </div>
           </div>
+
+          {Array.isArray((quality as any)?.failures) && (quality as any).failures.length ? (
+            <div className="mt-4 rounded-xl border border-rose-900/60 bg-rose-950/20 p-4 text-xs text-rose-200">
+              <div className="font-semibold">Quality failures</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {(quality as any).failures.slice(0, 20).map((f: any, idx: number) => (
+                  <li key={idx} className="font-mono">
+                    {String(f)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
