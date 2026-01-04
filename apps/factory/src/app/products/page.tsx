@@ -228,6 +228,80 @@ export default async function ProductsPage() {
     return { ok: true };
   }
 
+  async function seedCatalog(): Promise<SeedResult> {
+    "use server";
+    const { tenant, tenantDb, membership } = await requireTenantDb("ADMIN");
+
+    const existing = await tenantDb.productConfig.findMany({
+      where: { tenantId: tenant.id },
+      select: { productType: true },
+    });
+    const existingTypes = new Set(existing.map((r) => r.productType));
+
+    const prompt =
+      (await tenantDb.promptVersion.findFirst({
+        where: { tenantId: tenant.id },
+        orderBy: { createdAt: "desc" },
+      })) ??
+      (await tenantDb.promptVersion.create({
+        data: {
+          tenantId: tenant.id,
+          name: "ipf_v1",
+          schemaVersion: "1",
+          promptText: defaultPromptText(),
+          jsonSchema: defaultToolSchema() as any,
+          changelog: "Initial prompt + schema",
+        },
+      }));
+
+    const defs = [
+      { productType: "executive_brief", name: "Executive Brief", cadence: "weekly", scope: { windowDays: 7, maxEvidence: 40 } },
+      { productType: "travel_risk_advisory", name: "Travel Risk Advisory", cadence: "daily", scope: { windowHours: 24, maxEvidence: 30 } },
+      { productType: "facility_threat_bulletin", name: "Facility Threat Bulletin", cadence: "daily", scope: { windowHours: 24, maxEvidence: 30, includeSignalKinds: ["facility_geofence"], signalMinSeverity: 3 } },
+      { productType: "route_disruption_alert", name: "Route/Corridor Disruption Alert", cadence: null, scope: { windowHours: 24, maxEvidence: 25, includeSignalKinds: ["route_corridor"], signalMinSeverity: 3 } },
+      { productType: "reputation_watch", name: "Reputation / Brand Watch", cadence: "daily", scope: { windowHours: 24, maxEvidence: 30 } },
+      { productType: "counterfeit_alert", name: "Counterfeit / Product Integrity Alert", cadence: null, scope: { windowDays: 7, maxEvidence: 40 } },
+      { productType: "vendor_risk_snapshot", name: "Vendor / Partner Risk Snapshot", cadence: "weekly", scope: { windowDays: 7, maxEvidence: 40 } },
+      { productType: "crisis_sitrep", name: "Crisis SITREP", cadence: "daily", scope: { windowHours: 24, maxEvidence: 40 } },
+      { productType: "investigation_casefile", name: "Investigation / Case File", cadence: null, scope: { windowDays: 30, maxEvidence: 100 } },
+    ] as const;
+
+    const missing = defs.filter((d) => !existingTypes.has(d.productType));
+    if (!missing.length) return { ok: true };
+
+    await tenantDb.productConfig.createMany({
+      data: missing.map((d) => ({
+        tenantId: tenant.id,
+        productType: d.productType,
+        name: d.name,
+        enabled: false, // catalog-first would enable; DIS-first keeps these off until tuned.
+        cadence: d.cadence,
+        trigger: { cadence: d.cadence } as any,
+        scope: {
+          ...(d.scope as any),
+          rubric: { requireKeyJudgmentEvidenceRefs: true, requireEvidenceRefsMatchUsed: true },
+        } as any,
+        templateMarkdown: "",
+        promptVersionId: prompt.id,
+        distributionRules: { channels: ["email", "webhook", "teams"], includeDocxEmailAttachment: false } as any,
+        reviewPolicy: { requireReviewIfPerson: true } as any,
+      })),
+    });
+
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "product_configs.seeded_catalog",
+        actorUserId: membership.userId,
+        targetType: "product_config",
+        targetId: null,
+        metadata: { count: missing.length, productTypes: missing.map((d) => d.productType) },
+      },
+    });
+
+    return { ok: true };
+  }
+
   async function enqueueGenerate(formData: FormData) {
     "use server";
     const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
@@ -316,18 +390,32 @@ export default async function ProductsPage() {
             <div className="mt-1 text-xs text-zinc-500">Configs drive product generation (no bespoke code per type).</div>
           </div>
           {membership.role === "ADMIN" ? (
-            <form
-              action={async () => {
-                "use server";
-                const r = await seedDefaults();
-                if (!r.ok) throw new Error(r.error);
-                redirect("/products");
-              }}
-            >
-              <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
-                Seed 3 defaults
-              </button>
-            </form>
+            <div className="flex gap-2">
+              <form
+                action={async () => {
+                  "use server";
+                  const r = await seedDefaults();
+                  if (!r.ok) throw new Error(r.error);
+                  redirect("/products");
+                }}
+              >
+                <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
+                  Seed 3 defaults
+                </button>
+              </form>
+              <form
+                action={async () => {
+                  "use server";
+                  const r = await seedCatalog();
+                  if (!r.ok) throw new Error(r.error);
+                  redirect("/products");
+                }}
+              >
+                <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
+                  Seed catalog (disabled)
+                </button>
+              </form>
+            </div>
           ) : null}
         </div>
 
