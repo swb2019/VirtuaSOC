@@ -11,6 +11,7 @@ type Props = {
   geofences: MapGeofence[];
   signals: MapSignal[];
   routes: RouteGeometry[];
+  createRoute: (formData: FormData) => void | Promise<void>;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -159,38 +160,53 @@ export function MapDashboardClient(props: Props) {
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <div className="text-sm font-semibold text-zinc-200">Create route (corridor) — next</div>
+        <div className="text-sm font-semibold text-zinc-200">Create route (corridor)</div>
         <div className="mt-2 text-xs text-zinc-500">
-          Route drawing is enabled (toggle <span className="font-semibold text-zinc-200">Draw route</span>), and saving will be wired in the
-          next module (c).
+          Draw a route on the map (toggle <span className="font-semibold text-zinc-200">Draw route</span>), set the corridor buffer, then save.
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400">Route name</label>
-            <input
-              value={routeName}
-              onChange={(e) => setRouteName(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400">Corridor (km)</label>
-            <input
-              value={corridorKm}
-              onChange={(e) => setCorridorKm(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400">Drawn points</label>
-            <div className="mt-2 rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs text-zinc-300">
-              {drawPoints.length} points • {drawPoints.length >= 2 ? "LineString ready" : "Add at least 2 points"}
+
+        <form action={props.createRoute} className="mt-4 space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400">Route name</label>
+              <input
+                name="name"
+                value={routeName}
+                onChange={(e) => setRouteName(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400">Corridor (km)</label>
+              <input
+                name="corridorKm"
+                value={corridorKm}
+                onChange={(e) => setCorridorKm(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-sm text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400">Drawn points</label>
+              <div className="mt-2 rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs text-zinc-300">
+                {drawPoints.length} points • {drawPoints.length >= 2 ? "LineString ready" : "Add at least 2 points"}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="mt-4 rounded-xl border border-zinc-800 bg-black/20 p-3 text-xs text-zinc-400">
-          (preview) routeGeometry: <span className="font-mono">{routeGeojson ? `${routeGeojson.slice(0, 120)}…` : "—"}</span>
-        </div>
+
+          <input type="hidden" name="routeGeojson" value={routeGeojson} />
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-zinc-500">
+              Geometry preview: <span className="font-mono">{routeGeojson ? `${routeGeojson.slice(0, 120)}…` : "—"}</span>
+            </div>
+            <button
+              disabled={drawPoints.length < 2 || !routeName.trim()}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+            >
+              Save route
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

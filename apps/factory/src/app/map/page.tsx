@@ -133,6 +133,65 @@ export default async function MapPage() {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
+  async function createRoute(formData: FormData) {
+    "use server";
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
+
+    const name = String(formData.get("name") ?? "").trim();
+    const corridorKmRaw = Number(String(formData.get("corridorKm") ?? "").trim());
+    const geojsonRaw = String(formData.get("routeGeojson") ?? "").trim();
+
+    if (!name) throw new Error("Route name is required");
+    if (!geojsonRaw) throw new Error("routeGeojson is required");
+    if (!Number.isFinite(corridorKmRaw)) throw new Error("corridorKm is required");
+    const corridorKm = Math.max(0.1, Math.min(500, corridorKmRaw));
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(geojsonRaw);
+    } catch {
+      throw new Error("routeGeojson must be valid JSON");
+    }
+    if (!parsed || parsed.type !== "LineString" || !Array.isArray(parsed.coordinates)) {
+      throw new Error("routeGeojson must be a GeoJSON LineString");
+    }
+
+    const coords: [number, number][] = parsed.coordinates
+      .map((p: any) => [Number(p?.[0] ?? NaN), Number(p?.[1] ?? NaN)] as [number, number])
+      .filter((p: [number, number]) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+    if (coords.length < 2) throw new Error("Route must have at least 2 points");
+
+    // Persist as a ROUTE entity (corridor + geometry in metadata).
+    const created = await tenantDb.entity.create({
+      data: {
+        tenantId: tenant.id,
+        type: "ROUTE",
+        name,
+        description: null,
+        piiFlag: false,
+        metadata: {
+          routeGeometry: { type: "LineString", coordinates: coords },
+          corridorKm,
+          createdBy: membership.userId,
+          createdAt: new Date().toISOString(),
+        } as any,
+      },
+    });
+
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "route.created",
+        actorUserId: membership.userId,
+        targetType: "entity",
+        targetId: created.id,
+        metadata: { type: "ROUTE", name, corridorKm, pointCount: coords.length },
+      },
+    });
+
+    redirect("/map");
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-10 text-zinc-100">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -178,6 +237,7 @@ export default async function MapPage() {
         geofences={geofencesForMap}
         signals={signalsForMap}
         routes={routesForMap}
+        createRoute={createRoute}
       />
     </div>
   );
