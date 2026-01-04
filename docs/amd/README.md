@@ -46,7 +46,11 @@ Each module ships with:
 ### M6 — Review workflow + distribution
 - Draft → Review → Approved → Distributed
 - PDF export + SMTP/webhook distribution
+- Optional DOCX export (Pandoc) + per-tenant Word template override
 - Immutable run logs
 - Flag: `FEATURE_REVIEW_DISTRIBUTION`
+
+## Catalog
+See `docs/amd/report-catalog.md` for the config-driven report catalog and how to add new standardized GSOC report types without writing bespoke code.
 
 
