@@ -134,13 +134,49 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
     await getIngestQueue().add(
       JOB_PRODUCTS_DISTRIBUTE,
-      { tenantId: tenant.id, productId, distributionTargetIds: [], actorUserId: membership.userId, renderOnly: true },
-      { jobId: `prodexport:${tenant.id}:${productId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+      {
+        tenantId: tenant.id,
+        productId,
+        distributionTargetIds: [],
+        actorUserId: membership.userId,
+        renderOnly: true,
+        exportFormats: ["pdf"],
+      },
+      { jobId: `prodexport:${tenant.id}:${productId}:pdf`, removeOnComplete: 1000, removeOnFail: 1000 },
     );
     await tenantDb.auditLog.create({
       data: {
         tenantId: tenant.id,
         action: "product.pdf_export.queued",
+        actorUserId: membership.userId,
+        targetType: "product",
+        targetId: productId,
+        metadata: {},
+      },
+    });
+    redirect(`/products/${encodeURIComponent(productId)}`);
+  }
+
+  async function enqueueDocx() {
+    "use server";
+    if (!env.featureReviewDistribution) throw new Error("M6 (Review + distribution) is not enabled");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
+    await getIngestQueue().add(
+      JOB_PRODUCTS_DISTRIBUTE,
+      {
+        tenantId: tenant.id,
+        productId,
+        distributionTargetIds: [],
+        actorUserId: membership.userId,
+        renderOnly: true,
+        exportFormats: ["docx"],
+      },
+      { jobId: `prodexport:${tenant.id}:${productId}:docx`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "product.docx_export.queued",
         actorUserId: membership.userId,
         targetType: "product",
         targetId: productId,
@@ -229,12 +265,27 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </button>
                 </form>
               ) : null}
+              {membership.role !== "VIEWER" ? (
+                <form action={enqueueDocx}>
+                  <button className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700">
+                    Generate DOCX
+                  </button>
+                </form>
+              ) : null}
               {exportRow?.pdfBytes ? (
                 <a
                   href={`/api/products/${encodeURIComponent(product.id)}/pdf`}
                   className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
                 >
                   Download PDF
+                </a>
+              ) : null}
+              {exportRow?.docxBytes ? (
+                <a
+                  href={`/api/products/${encodeURIComponent(product.id)}/docx`}
+                  className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+                >
+                  Download DOCX
                 </a>
               ) : null}
             </>

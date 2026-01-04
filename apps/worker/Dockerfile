@@ -27,6 +27,7 @@ WORKDIR /repo
 ENV NODE_ENV=production
 RUN apk add --no-cache \
     chromium \
+    pandoc \
     nss \
     freetype \
     harfbuzz \

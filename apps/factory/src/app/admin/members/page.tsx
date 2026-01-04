@@ -103,12 +103,20 @@ export default async function MembersAdminPage() {
             Manage members and invitations for <span className="font-mono text-zinc-200">{tenant.slug}</span>
           </div>
         </div>
-        <Link
-          href="/tenants"
-          className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
-        >
-          Switch tenant
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/docx-template"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            DOCX template
+          </Link>
+          <Link
+            href="/tenants"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Switch tenant
+          </Link>
+        </div>
       </div>
 
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">

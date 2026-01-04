@@ -410,10 +410,28 @@ model ProductExport {
   pdfSha256   String? @map("pdf_sha256")
   contentType String  @default("application/pdf") @map("content_type")
 
+  docxBytes       Bytes?  @map("docx_bytes")
+  docxSha256      String? @map("docx_sha256")
+  docxContentType String? @map("docx_content_type")
+
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, updatedAt(sort: Desc)])
   @@map("product_exports")
+}
+
+model TenantDocxTemplate {
+  tenantId  String   @id @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz @map("updated_at")
+
+  label       String?
+  docxBytes   Bytes  @map("docx_bytes")
+  docxSha256  String @map("docx_sha256")
+  contentType String @default("application/vnd.openxmlformats-officedocument.wordprocessingml.document") @map("content_type")
+
+  @@index([updatedAt(sort: Desc)])
+  @@map("tenant_docx_templates")
 }
 
 model ProductDistributionRecord {

@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 import puppeteer from "puppeteer-core";
 
@@ -15,10 +19,12 @@ export type DistributeProductJobPayload = {
   distributionTargetIds?: string[];
   actorUserId?: string | null;
   renderOnly?: boolean;
+  exportFormats?: ("pdf" | "docx")[]; // when renderOnly=true, controls which exports to produce
 };
 
 type ProductRow = {
   id: string;
+  product_type: string;
   title: string;
   status: string;
   content_markdown: string | null;
@@ -89,6 +95,8 @@ function chromiumExecutablePath(): string {
   throw new Error("Chromium executable not found. Set CHROMIUM_PATH (or install chromium in the worker image).");
 }
 
+const execFileAsync = promisify(execFile);
+
 async function renderMarkdownToPdf(markdown: string): Promise<{ bytes: Buffer; sha256: string }> {
   const text = redactPii(markdown);
   const html = `<!doctype html>
@@ -132,14 +140,111 @@ async function renderMarkdownToPdf(markdown: string): Promise<{ bytes: Buffer; s
   }
 }
 
-async function upsertProductExport(db: Db, tenantId: string, productId: string, pdf: { bytes: Buffer; sha256: string }) {
+async function renderMarkdownToDocx(markdown: string, referenceDocxBytes?: Buffer): Promise<{ bytes: Buffer; sha256: string }> {
+  const text = redactPii(markdown);
+  const dir = await fs.promises.mkdtemp(join(tmpdir(), "ipf-docx-"));
+  const mdPath = join(dir, "input.md");
+  const outPath = join(dir, "output.docx");
+  const refPath = join(dir, "reference.docx");
+
+  try {
+    await fs.promises.writeFile(mdPath, text, "utf8");
+    if (referenceDocxBytes?.length) {
+      await fs.promises.writeFile(refPath, referenceDocxBytes);
+    }
+
+    const args = ["--from", "gfm", "--to", "docx", "--output", outPath, mdPath];
+    if (referenceDocxBytes?.length) {
+      args.splice(0, 0, "--reference-doc", refPath);
+    }
+
+    try {
+      await execFileAsync("pandoc", args, { timeout: 30_000, windowsHide: true } as any);
+    } catch (err) {
+      const msg = String((err as any)?.message ?? err);
+      throw new Error(`DOCX export failed (pandoc): ${msg}`);
+    }
+
+    const bytes = await fs.promises.readFile(outPath);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    return { bytes, sha256 };
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function loadTenantDocxTemplate(db: Db, tenantId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
+  try {
+    const rows = await db<{ docx_bytes: Buffer; content_type: string }[]>`
+      SELECT docx_bytes, content_type
+      FROM tenant_docx_templates
+      WHERE tenant_id = ${tenantId}
+      LIMIT 1
+    `;
+    const r = rows[0];
+    if (!r?.docx_bytes) return null;
+    const ct =
+      typeof r.content_type === "string" && r.content_type.trim()
+        ? r.content_type.trim()
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    return { bytes: r.docx_bytes, contentType: ct };
+  } catch (err) {
+    const msg = String((err as any)?.message ?? err);
+    if (msg.includes("relation") && msg.includes("tenant_docx_templates")) return null;
+    throw err;
+  }
+}
+
+async function loadProductDistributionRules(db: Db, tenantId: string, productType: string): Promise<any> {
+  try {
+    const rows = await db<{ distribution_rules: any }[]>`
+      SELECT distribution_rules
+      FROM product_configs
+      WHERE tenant_id = ${tenantId} AND product_type = ${productType}
+      LIMIT 1
+    `;
+    return rows[0]?.distribution_rules ?? {};
+  } catch {
+    return {};
+  }
+}
+
+async function upsertProductExport(
+  db: Db,
+  tenantId: string,
+  productId: string,
+  exports: {
+    pdf?: { bytes: Buffer; sha256: string };
+    docx?: { bytes: Buffer; sha256: string };
+    docxContentType?: string;
+  },
+) {
   await db`
-    INSERT INTO product_exports (product_id, tenant_id, pdf_bytes, pdf_sha256, content_type, created_at, updated_at)
-    VALUES (${productId}, ${tenantId}, ${pdf.bytes}, ${pdf.sha256}, ${"application/pdf"}, NOW(), NOW())
+    INSERT INTO product_exports (
+      product_id, tenant_id,
+      pdf_bytes, pdf_sha256, content_type,
+      docx_bytes, docx_sha256, docx_content_type,
+      created_at, updated_at
+    )
+    VALUES (
+      ${productId},
+      ${tenantId},
+      ${exports.pdf?.bytes ?? null},
+      ${exports.pdf?.sha256 ?? null},
+      ${"application/pdf"},
+      ${exports.docx?.bytes ?? null},
+      ${exports.docx?.sha256 ?? null},
+      ${exports.docx ? (exports.docxContentType ?? "application/vnd.openxmlformats-officedocument.wordprocessingml.document") : null},
+      NOW(),
+      NOW()
+    )
     ON CONFLICT (product_id) DO UPDATE SET
-      pdf_bytes = EXCLUDED.pdf_bytes,
-      pdf_sha256 = EXCLUDED.pdf_sha256,
-      content_type = EXCLUDED.content_type,
+      pdf_bytes = COALESCE(EXCLUDED.pdf_bytes, product_exports.pdf_bytes),
+      pdf_sha256 = COALESCE(EXCLUDED.pdf_sha256, product_exports.pdf_sha256),
+      content_type = COALESCE(EXCLUDED.content_type, product_exports.content_type),
+      docx_bytes = COALESCE(EXCLUDED.docx_bytes, product_exports.docx_bytes),
+      docx_sha256 = COALESCE(EXCLUDED.docx_sha256, product_exports.docx_sha256),
+      docx_content_type = COALESCE(EXCLUDED.docx_content_type, product_exports.docx_content_type),
       updated_at = NOW()
   `;
 }
@@ -211,7 +316,7 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
 
   try {
     const products = await db<ProductRow[]>`
-      SELECT id, title, status, content_markdown, content_json
+      SELECT id, product_type, title, status, content_markdown, content_json
       FROM products
       WHERE tenant_id = ${tenantId} AND id = ${productId}
       LIMIT 1
@@ -224,8 +329,22 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
     const markdown = product.content_markdown?.trim() || "";
     if (!markdown) throw new Error("Product has no rendered markdown");
 
-    const pdf = await renderMarkdownToPdf(markdown);
-    await upsertProductExport(db, tenantId, productId, pdf);
+    // Determine which exports to produce.
+    const requested = Array.isArray(payload.exportFormats) ? payload.exportFormats.map(String) : [];
+    const exportFormats = Array.from(new Set(requested)).filter((x) => x === "pdf" || x === "docx");
+    const shouldExportPdf = !payload.renderOnly || exportFormats.length === 0 || exportFormats.includes("pdf");
+    const shouldExportDocx = exportFormats.includes("docx");
+
+    const tenantTemplate = shouldExportDocx ? await loadTenantDocxTemplate(db, tenantId) : null;
+
+    const pdf = shouldExportPdf ? await renderMarkdownToPdf(markdown) : null;
+    const docx = shouldExportDocx ? await renderMarkdownToDocx(markdown, tenantTemplate?.bytes) : null;
+
+    await upsertProductExport(db, tenantId, productId, {
+      ...(pdf ? { pdf } : {}),
+      ...(docx ? { docx } : {}),
+      docxContentType: tenantTemplate?.contentType ?? "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
 
     if (payload.renderOnly) {
       await db`
@@ -233,18 +352,18 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
         VALUES (
           ${randomUUID()},
           ${tenantId},
-          ${"product.exported_pdf"},
+          ${docx ? "product.exported_docx" : "product.exported_pdf"},
           ${actor},
           ${"product"},
           ${productId},
-          ${db.json({ pdfSha256: pdf.sha256 })}
+          ${db.json({ pdfSha256: pdf?.sha256 ?? null, docxSha256: docx?.sha256 ?? null, formats: exportFormats.length ? exportFormats : ["pdf"] })}
         )
       `;
 
       await db`
         UPDATE run_logs
         SET status = ${"succeeded"},
-            output = ${db.json({ productId, pdfSha256: pdf.sha256 })}
+            output = ${db.json({ productId, pdfSha256: pdf?.sha256 ?? null, docxSha256: docx?.sha256 ?? null, formats: exportFormats.length ? exportFormats : ["pdf"] })}
         WHERE id = ${runId}
       `;
       return;
@@ -254,6 +373,8 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
     if (!targets.length) throw new Error("No enabled distribution targets selected");
 
     const smtp = getSmtpConfig();
+    const rules = await loadProductDistributionRules(db, tenantId, product.product_type);
+    const includeDocxEmailAttachment = Boolean(rules?.includeDocxEmailAttachment);
 
     let anyFailed = false;
     for (const t of targets) {
@@ -264,8 +385,20 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
           if (!smtp) throw new Error("SMTP not configured (SMTP_HOST/PORT/USER/PASS/FROM)");
           const to = (t.value ?? "").trim();
           if (!to) throw new Error("Missing email target");
+          if (!pdf) throw new Error("PDF export missing (cannot email without PDF)");
           await sendEmail(smtp, to, product.title, redactPii(markdown), {
-            attachments: [{ filename: `${safeFilename(product.title)}.pdf`, content: pdf.bytes, contentType: "application/pdf" }],
+            attachments: [
+              { filename: `${safeFilename(product.title)}.pdf`, content: pdf.bytes, contentType: "application/pdf" },
+              ...(includeDocxEmailAttachment && docx
+                ? [
+                    {
+                      filename: `${safeFilename(product.title)}.docx`,
+                      content: docx.bytes,
+                      contentType: tenantTemplate?.contentType ?? "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    },
+                  ]
+                : []),
+            ],
           });
         } else if (t.kind === "webhook") {
           const url = (t.value ?? "").trim();
@@ -275,9 +408,11 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
             productId,
             title: product.title,
             status: product.status,
-            pdfSha256: pdf.sha256,
+            pdfSha256: pdf?.sha256 ?? null,
+            docxSha256: docx?.sha256 ?? null,
             // Include PDF inline only if explicitly enabled (size/cost control).
-            pdfBase64: (process.env.WEBHOOK_INCLUDE_PDF_BASE64 ?? "false") === "true" ? pdf.bytes.toString("base64") : undefined,
+            pdfBase64:
+              (process.env.WEBHOOK_INCLUDE_PDF_BASE64 ?? "false") === "true" && pdf ? pdf.bytes.toString("base64") : undefined,
             contentMarkdown: redactPii(markdown),
             contentJson: product.content_json ?? {},
           });
@@ -299,7 +434,7 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
             ${actor},
             ${"product"},
             ${productId},
-            ${db.json({ distributionId, kind: t.kind, target: t.value, pdfSha256: pdf.sha256 })}
+            ${db.json({ distributionId, kind: t.kind, target: t.value, pdfSha256: pdf?.sha256 ?? null, docxSha256: docx?.sha256 ?? null })}
           )
         `;
       } catch (err) {
@@ -332,7 +467,7 @@ export async function distributeProduct(db: Db, payload: DistributeProductJobPay
     await db`
       UPDATE run_logs
       SET status = ${anyFailed ? "partial_failed" : "succeeded"},
-          output = ${db.json({ productId, pdfSha256: pdf.sha256, targets: targets.map((t) => ({ kind: t.kind, value: t.value })) })}
+          output = ${db.json({ productId, pdfSha256: pdf?.sha256 ?? null, docxSha256: docx?.sha256 ?? null, targets: targets.map((t) => ({ kind: t.kind, value: t.value })) })}
       WHERE id = ${runId}
     `;
   } catch (err) {
