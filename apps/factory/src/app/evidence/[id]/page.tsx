@@ -36,6 +36,13 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
     include: { geofence: { include: { entity: true } } },
   });
 
+  const routeCorridorMatches = await tenantDb.routeCorridorMatch.findMany({
+    where: { tenantId: tenant.id, evidenceId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: { routeEntity: true },
+  });
+
   const facilitySignals = await tenantDb.signal.findMany({
     where: {
       tenantId: tenant.id,
@@ -203,6 +210,55 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
             </a>
           </div>
         ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold">Route corridors</div>
+          <div className="text-xs text-zinc-400">{routeCorridorMatches.length} matches</div>
+        </div>
+
+        {!routeCorridorMatches.length ? (
+          <div className="mt-4 text-sm text-zinc-400">No route corridor matches for this evidence.</div>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800">
+            <table className="w-full text-sm">
+              <thead className="bg-black/40 text-left text-zinc-300">
+                <tr>
+                  <th className="px-4 py-3">Route</th>
+                  <th className="px-4 py-3">Corridor</th>
+                  <th className="px-4 py-3">Distance</th>
+                  <th className="px-4 py-3">Segment</th>
+                  <th className="px-4 py-3">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+                {routeCorridorMatches.map((m) => {
+                  const corridorKm = Number((m.routeEntity?.metadata as any)?.corridorKm ?? NaN);
+                  return (
+                    <tr key={m.id}>
+                      <td className="px-4 py-3 font-semibold text-zinc-100">
+                        <a className="text-sky-300 hover:underline" href={`/entities/${encodeURIComponent(m.routeEntityId)}`}>
+                          {m.routeEntity?.name ?? m.routeEntityId}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-200">
+                        {Number.isFinite(corridorKm) ? `${corridorKm.toFixed(1)} km` : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-200">
+                        {typeof m.distanceKm === "number" ? `${m.distanceKm.toFixed(2)} km` : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-200">
+                        {typeof m.closestSegmentIndex === "number" ? String(m.closestSegmentIndex) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-400">{new Date(m.createdAt).toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
