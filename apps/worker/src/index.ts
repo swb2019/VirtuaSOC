@@ -176,11 +176,11 @@ async function main() {
         const tenantDb = await tenantDbFor(payload.tenantId);
         const createdSignals = await evaluateSignal(tenantDb, payload);
 
-        // Optional: auto-draft a Flash Alert when a high-severity facility geofence signal is created.
+        // Optional: auto-draft a Flash Alert when a high-severity geo proximity signal is created.
         const productFactoryEnabled = (process.env.FEATURE_PRODUCT_FACTORY ?? "false").trim().toLowerCase() === "true";
         if (productFactoryEnabled) {
           for (const s of createdSignals) {
-            if (s.kind !== "facility_geofence") continue;
+            if (s.kind !== "facility_geofence" && s.kind !== "route_corridor") continue;
             if (s.severity < 4) continue;
 
             await ingestQueue.add(
