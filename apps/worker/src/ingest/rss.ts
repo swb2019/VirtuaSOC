@@ -13,9 +13,9 @@ function contentHash(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-type Geo = { lat: number; lon: number };
+export type Geo = { lat: number; lon: number };
 
-function parseGeoPoint(raw: unknown): Geo | null {
+export function parseGeoPoint(raw: unknown): Geo | null {
   if (typeof raw !== "string") return null;
   const s = raw.trim();
   if (!s) return null;
@@ -71,7 +71,7 @@ const ALLOWED_CATEGORY_TAGS = new Set<string>([
   "weather",
 ]);
 
-function tagsFromCategories(categories: unknown): string[] {
+export function tagsFromCategories(categories: unknown): string[] {
   const raw = Array.isArray(categories) ? categories.map(String) : [];
   const mapped = raw
     .map((c) => normalizeTag(c))
@@ -82,7 +82,7 @@ function tagsFromCategories(categories: unknown): string[] {
   return Array.from(new Set(mapped));
 }
 
-function geoFromItem(item: any): { geo: Geo; source: string } | null {
+export function geoFromItem(item: any): { geo: Geo; source: string } | null {
   // GeoRSS
   const georss = parseGeoPoint(item?.["georss:point"]);
   if (georss) return { geo: georss, source: "georss:point" };

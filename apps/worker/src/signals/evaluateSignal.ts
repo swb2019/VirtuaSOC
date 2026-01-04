@@ -260,7 +260,7 @@ export function scoreFromDistanceKm(distanceKm: number): { score: number; reason
   return { score: 0, reason: "distance>25km (+0)" };
 }
 
-function scoreFromRouteTags(tags: string[]): { score: number; reasons: string[] } {
+export function scoreFromRouteTags(tags: string[]): { score: number; reasons: string[] } {
   const t = new Set(tags.map((x) => String(x).trim().toLowerCase()).filter(Boolean));
   let score = 0;
   const reasons: string[] = [];
@@ -317,7 +317,7 @@ function pointToSegmentDistanceKm(
   return Math.hypot(px - cx, py - cy);
 }
 
-function pointToPolylineDistanceKm(
+export function pointToPolylineDistanceKm(
   p: GeoPoint,
   coords: [number, number][], // [lon,lat]
 ): { distanceKm: number; segmentIndex: number } {
@@ -335,7 +335,7 @@ function pointToPolylineDistanceKm(
   return { distanceKm: best, segmentIndex: bestIdx };
 }
 
-function routeFromMetadata(meta: any): { coords: [number, number][]; corridorKm: number } | null {
+export function routeFromMetadata(meta: any): { coords: [number, number][]; corridorKm: number } | null {
   const g = meta?.routeGeometry;
   if (!g || typeof g !== "object") return null;
   if (g.type !== "LineString") return null;
