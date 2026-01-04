@@ -82,6 +82,12 @@ export default async function EntitiesPage() {
             Evidence
           </a>
           <a
+            href="/map"
+            className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
+          >
+            Map
+          </a>
+          <a
             href="/tenants"
             className="rounded-lg border border-zinc-800 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-zinc-700"
           >
