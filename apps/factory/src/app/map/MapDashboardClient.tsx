@@ -119,7 +119,7 @@ export function MapDashboardClient(props: Props) {
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
           <div className="text-sm font-semibold text-zinc-200">Recent alerts</div>
-          <div className="mt-2 text-xs text-zinc-500">Recent facility geofence signals (click through to evidence).</div>
+          <div className="mt-2 text-xs text-zinc-500">Recent geo signals (geofences + corridors). Click through to evidence.</div>
 
           <div className="mt-4 space-y-2 text-sm">
             {props.signals
