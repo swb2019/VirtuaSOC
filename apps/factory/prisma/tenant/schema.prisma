@@ -32,6 +32,7 @@ model EvidenceItem {
   signalLinks SignalEvidenceLink[]
   indicators  EvidenceIndicator[]
   geofenceMatches GeofenceMatch[]
+  routeCorridorMatches RouteCorridorMatch[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, fetchedAt(sort: Desc)])
@@ -109,6 +110,27 @@ model GeofenceMatch {
   @@map("geofence_matches")
 }
 
+model RouteCorridorMatch {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid @map("tenant_id")
+  createdAt DateTime @default(now()) @db.Timestamptz @map("created_at")
+
+  routeEntityId String @db.Uuid @map("route_entity_id")
+  evidenceId     String @db.Uuid @map("evidence_id")
+
+  distanceKm          Float? @map("distance_km")
+  closestSegmentIndex Int?   @map("closest_segment_index")
+  metadata            Json   @default("{}")
+
+  routeEntity Entity @relation(fields: [routeEntityId], references: [id], onDelete: Cascade)
+  evidence    EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, routeEntityId, evidenceId])
+  @@index([tenantId, evidenceId, createdAt(sort: Desc)])
+  @@index([tenantId, routeEntityId, createdAt(sort: Desc)])
+  @@map("route_corridor_matches")
+}
+
 model Entity {
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @db.Uuid @map("tenant_id")
@@ -124,6 +146,7 @@ model Entity {
   links EvidenceEntityLink[]
   signalLinks SignalEntityLink[]
   geofences Geofence[]
+  routeCorridorMatches RouteCorridorMatch[]
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([tenantId, type])
