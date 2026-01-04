@@ -7,6 +7,7 @@ import {
   validateGeneratedProductJson,
   type ConfidenceLevel,
   type GeneratedProductJson,
+  type ProductValidationOptions,
 } from "./productSchema.js";
 
 export type GenerateProductJobPayload = {
@@ -284,18 +285,56 @@ async function ensureSeeded(db: Db, tenantId: string) {
       ${"ipf_v1"},
       ${"1"},
       ${[
-        "You are an intelligence analyst assistant.",
-        "You MUST be evidence-bound: only use the provided blinded evidence references (EVD-###).",
-        "Do NOT include URLs anywhere (no http/https).",
-        "Do NOT mention analytic confidence or likelihood in the narrative body; those are handled elsewhere.",
-        "Return a tool call that populates the required JSON fields.",
+        "You are an intelligence analyst assistant drafting standardized GSOC intelligence products.",
+        "",
+        "Hard tradecraft rules (non-negotiable):",
+        "- Evidence-bound: ONLY use the provided evidence refs (EVD-###). Do NOT invent sources, facts, or URLs.",
+        "- Do NOT include URLs anywhere (no http/https).",
+        "- Do NOT mention analytic confidence or likelihood in bodyMarkdown or changeFromLast; those are handled in separate fields.",
+        "",
+        "Daily Intelligence Summary (DIS) rubric expectations:",
+        "- keyJudgments must be 3–5 items AND each item must cite at least one EVD-###.",
+        "- evidenceRefs must exactly match the set of EVD-### refs used in keyJudgments/bodyMarkdown/changeFromLast.",
+        "- Use concise, decision-oriented language suitable for a Fortune 500 GSOC.",
+        "",
+        "Return a tool call that populates the required JSON fields exactly.",
       ].join("\\n")},
       ${db.json(toolSchema)},
       ${"Initial prompt + schema"},
     )
   `;
 
-  const dailyTemplate = ""; // use default renderer template
+  const dailyTemplate = [
+    "# {{TITLE}}",
+    "",
+    "## Key Judgments (evidence-bound)",
+    "{{KEY_JUDGMENTS}}",
+    "",
+    "## Narrative",
+    "{{BODY}}",
+    "",
+    "## Evidence (blinded)",
+    "{{EVIDENCE}}",
+    "",
+    "## Analytic Confidence",
+    "{{CONFIDENCE_LEVEL}}",
+    "",
+    "{{CONFIDENCE_RATIONALE}}",
+    "",
+    "## Likelihood",
+    "{{LIKELIHOOD_TERM}} ({{LIKELIHOOD_MIN}}–{{LIKELIHOOD_MAX}})",
+    "",
+    "## Risk Matrix",
+    "Likelihood {{RISK_LIKELIHOOD}} / Impact {{RISK_IMPACT}}",
+    "",
+    "## Indicators/Signposts",
+    "{{INDICATORS}}",
+    "",
+    "## Actions",
+    "{{ACTIONS}}",
+    "",
+    "{{CHANGE_FROM_LAST_SECTION}}",
+  ].join("\\n");
   const flashTemplate = "";
   const weeklyTemplate = "";
 
@@ -311,7 +350,13 @@ async function ensureSeeded(db: Db, tenantId: string) {
       ${true},
       ${"daily"},
       ${db.json({ cadence: "daily" })},
-      ${db.json({ windowHours: 24, maxEvidence: 25 })},
+      ${db.json({
+        windowHours: 24,
+        maxEvidence: 35,
+        includeSignalKinds: ["facility_geofence", "route_corridor"],
+        signalMinSeverity: 3,
+        rubric: { requireKeyJudgmentEvidenceRefs: true, requireEvidenceRefsMatchUsed: true },
+      })},
       ${dailyTemplate},
       ${promptId},
       ${db.json({ channels: ["email", "webhook", "teams"] })},
@@ -462,6 +507,50 @@ function parseWindow(scope: any): { hours: number; maxEvidence: number } {
   return { hours: 24, maxEvidence };
 }
 
+function parseScopeFilters(scope: any): {
+  triageStatus?: "new" | "triaged";
+  tagsAny: string[];
+  tagsAll: string[];
+  includeSignalKinds: string[];
+  signalMinSeverity: number;
+  rubric: {
+    requireKeyJudgmentEvidenceRefs?: boolean;
+    requireEvidenceRefsMatchUsed?: boolean;
+  };
+} {
+  const triageRaw = typeof scope?.triageStatus === "string" ? scope.triageStatus.trim().toLowerCase() : "";
+  const triageStatus = triageRaw === "new" || triageRaw === "triaged" ? (triageRaw as "new" | "triaged") : undefined;
+
+  const tagsAny = Array.isArray(scope?.tagsAny)
+    ? Array.from(new Set(scope.tagsAny.map(String).map((s: string) => s.trim()).filter(Boolean)))
+    : [];
+  const tagsAll = Array.isArray(scope?.tagsAll)
+    ? Array.from(new Set(scope.tagsAll.map(String).map((s: string) => s.trim()).filter(Boolean)))
+    : [];
+
+  const includeSignalKinds = Array.isArray(scope?.includeSignalKinds)
+    ? Array.from(new Set(scope.includeSignalKinds.map(String).map((s: string) => s.trim()).filter(Boolean)))
+    : [];
+
+  const signalMinSeverityRaw = Number(scope?.signalMinSeverity ?? NaN);
+  const signalMinSeverity = Number.isFinite(signalMinSeverityRaw) ? clamp(signalMinSeverityRaw, 0, 5) : 0;
+
+  const rubricScope = scope?.rubric ?? {};
+  const requireKeyJudgmentEvidenceRefs =
+    typeof rubricScope?.requireKeyJudgmentEvidenceRefs === "boolean" ? rubricScope.requireKeyJudgmentEvidenceRefs : undefined;
+  const requireEvidenceRefsMatchUsed =
+    typeof rubricScope?.requireEvidenceRefsMatchUsed === "boolean" ? rubricScope.requireEvidenceRefsMatchUsed : undefined;
+
+  return {
+    triageStatus,
+    tagsAny,
+    tagsAll,
+    includeSignalKinds,
+    signalMinSeverity,
+    rubric: { requireKeyJudgmentEvidenceRefs, requireEvidenceRefsMatchUsed },
+  };
+}
+
 async function evidenceForJob(db: Db, payload: GenerateProductJobPayload, cfg: ProductConfigRow): Promise<EvidenceRow[]> {
   if (payload.signalId) {
     const rows = await db<{ evidence_id: string }[]>`
@@ -483,13 +572,46 @@ async function evidenceForJob(db: Db, payload: GenerateProductJobPayload, cfg: P
     `;
   }
 
-  const { hours, maxEvidence } = parseWindow(cfg.scope ?? {});
+  const scope = cfg.scope ?? {};
+  const { hours, maxEvidence } = parseWindow(scope);
+  const filters = parseScopeFilters(scope);
+
+  const triageCond = filters.triageStatus ? db`AND e.triage_status = ${filters.triageStatus}` : db``;
+  const tagsAnyCond = filters.tagsAny.length ? db`AND e.tags && ${db.array(filters.tagsAny, 1009)}` : db``;
+  const tagsAllCond = filters.tagsAll.length ? db`AND e.tags @> ${db.array(filters.tagsAll, 1009)}` : db``;
+
+  if (filters.includeSignalKinds.length) {
+    return await db<EvidenceRow[]>`
+      SELECT
+        e.id, e.fetched_at, e.source_type, e.source_uri, e.title, e.summary, e.content_text, e.metadata, e.tags, e.triage_status
+      FROM evidence_items e
+      LEFT JOIN signal_evidence_links l
+        ON l.tenant_id = e.tenant_id AND l.evidence_id = e.id
+      LEFT JOIN signals s
+        ON s.id = l.signal_id
+        AND s.tenant_id = e.tenant_id
+        AND s.kind = ANY(${db.array(filters.includeSignalKinds, 1009)})
+        AND s.severity >= ${filters.signalMinSeverity}
+      WHERE e.tenant_id = ${payload.tenantId}
+        AND e.fetched_at > NOW() - (${hours}::int * INTERVAL '1 hour')
+        ${triageCond}
+        ${tagsAnyCond}
+        ${tagsAllCond}
+      GROUP BY e.id, e.fetched_at, e.source_type, e.source_uri, e.title, e.summary, e.content_text, e.metadata, e.tags, e.triage_status
+      ORDER BY COALESCE(MAX(s.severity), 0) DESC, e.fetched_at DESC
+      LIMIT ${maxEvidence}
+    `;
+  }
+
   return await db<EvidenceRow[]>`
     SELECT id, fetched_at, source_type, source_uri, title, summary, content_text, metadata, tags, triage_status
-    FROM evidence_items
-    WHERE tenant_id = ${payload.tenantId}
-      AND fetched_at > NOW() - (${hours}::int * INTERVAL '1 hour')
-    ORDER BY fetched_at DESC
+    FROM evidence_items e
+    WHERE e.tenant_id = ${payload.tenantId}
+      AND e.fetched_at > NOW() - (${hours}::int * INTERVAL '1 hour')
+      ${triageCond}
+      ${tagsAnyCond}
+      ${tagsAllCond}
+    ORDER BY e.fetched_at DESC
     LIMIT ${maxEvidence}
   `;
 }
@@ -596,7 +718,19 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
       });
     }
 
-    const validated = validateGeneratedProductJson(raw, allowedRefs, requireChangeFromLast);
+    // Tradecraft: stricter rubric defaults for Daily Intelligence Summary (can be overridden via cfg.scope.rubric).
+    const scope = cfg.scope ?? {};
+    const filters = parseScopeFilters(scope);
+    const disDefaults =
+      productType === "daily_intel_summary"
+        ? { requireKeyJudgmentEvidenceRefs: true, requireEvidenceRefsMatchUsed: true }
+        : { requireKeyJudgmentEvidenceRefs: false, requireEvidenceRefsMatchUsed: false };
+    const validateOptions: ProductValidationOptions = {
+      requireKeyJudgmentEvidenceRefs: filters.rubric.requireKeyJudgmentEvidenceRefs ?? disDefaults.requireKeyJudgmentEvidenceRefs,
+      requireEvidenceRefsMatchUsed: filters.rubric.requireEvidenceRefsMatchUsed ?? disDefaults.requireEvidenceRefsMatchUsed,
+    };
+
+    const validated = validateGeneratedProductJson(raw, allowedRefs, requireChangeFromLast, validateOptions);
     if (!validated.ok) throw new Error(`LLM output invalid: ${validated.error}`);
     const gen: GeneratedProductJson = validated.value;
 

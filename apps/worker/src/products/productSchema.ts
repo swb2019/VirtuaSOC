@@ -38,6 +38,13 @@ export type ValidationResult =
   | { ok: true; value: GeneratedProductJson }
   | { ok: false; error: string };
 
+export type ProductValidationOptions = {
+  // If true, each key judgment must include at least one blinded evidence ref (EVD-###).
+  requireKeyJudgmentEvidenceRefs?: boolean;
+  // If true, evidenceRefs must match the exact set of refs used in the output (KJs/body/changeFromLast).
+  requireEvidenceRefsMatchUsed?: boolean;
+};
+
 function hasHttpUrl(text: string): boolean {
   return /https?:\/\//i.test(text);
 }
@@ -60,6 +67,7 @@ export function validateGeneratedProductJson(
   raw: unknown,
   allowedEvidenceRefs: Set<string>,
   requireChangeFromLast: boolean,
+  options?: ProductValidationOptions,
 ): ValidationResult {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Output is not an object" };
   const r: any = raw;
@@ -73,12 +81,21 @@ export function validateGeneratedProductJson(
     return { ok: false, error: "keyJudgments must be 3-5 items" };
   }
   if (keyJudgments.some((s) => hasHttpUrl(s))) return { ok: false, error: "keyJudgments contains URL" };
+  const keyJudgmentRefs = keyJudgments.flatMap((s) => extractEvidenceRefs(s));
+  for (const ref of keyJudgmentRefs) {
+    if (!allowedEvidenceRefs.has(ref)) return { ok: false, error: `keyJudgments contains unknown evidenceRef: ${ref}` };
+  }
+  if (options?.requireKeyJudgmentEvidenceRefs) {
+    const missing = keyJudgments.find((s) => extractEvidenceRefs(s).length === 0);
+    if (missing) return { ok: false, error: "Each keyJudgment must cite at least one EVD-### reference" };
+  }
 
   const indicators = Array.isArray(r.indicators) ? r.indicators.map(String).map((s: string) => s.trim()).filter(Boolean) : [];
   if (indicators.some((s) => hasHttpUrl(s))) return { ok: false, error: "indicators contains URL" };
 
   const evidenceRefs = Array.isArray(r.evidenceRefs) ? r.evidenceRefs.map(String).map((s: string) => s.trim()).filter(Boolean) : [];
   if (!evidenceRefs.length) return { ok: false, error: "evidenceRefs is required" };
+  const evidenceRefsSet = new Set(evidenceRefs);
   for (const ref of evidenceRefs) {
     if (!allowedEvidenceRefs.has(ref)) return { ok: false, error: `Invalid evidenceRef: ${ref}` };
   }
@@ -89,8 +106,12 @@ export function validateGeneratedProductJson(
   if (hasForbiddenTradecraftTerms(bodyMarkdown)) {
     return { ok: false, error: "bodyMarkdown must not mention confidence or likelihood (tradecraft rule)" };
   }
-  for (const ref of extractEvidenceRefs(bodyMarkdown)) {
+  const bodyRefs = extractEvidenceRefs(bodyMarkdown);
+  for (const ref of bodyRefs) {
     if (!allowedEvidenceRefs.has(ref)) return { ok: false, error: `bodyMarkdown contains unknown evidenceRef: ${ref}` };
+  }
+  for (const ref of bodyRefs) {
+    if (!evidenceRefsSet.has(ref)) return { ok: false, error: `evidenceRefs missing ref used in bodyMarkdown: ${ref}` };
   }
 
   const likelihood = r.likelihood;
@@ -134,6 +155,23 @@ export function validateGeneratedProductJson(
   if (changeFromLast && hasHttpUrl(changeFromLast)) return { ok: false, error: "changeFromLast contains URL" };
   if (changeFromLast && hasForbiddenTradecraftTerms(changeFromLast)) {
     return { ok: false, error: "changeFromLast must not mention confidence or likelihood (tradecraft rule)" };
+  }
+  const changeRefs = changeFromLast ? extractEvidenceRefs(changeFromLast) : [];
+  for (const ref of changeRefs) {
+    if (!allowedEvidenceRefs.has(ref)) return { ok: false, error: `changeFromLast contains unknown evidenceRef: ${ref}` };
+    if (!evidenceRefsSet.has(ref)) return { ok: false, error: `evidenceRefs missing ref used in changeFromLast: ${ref}` };
+  }
+
+  // If enabled, ensure evidenceRefs matches the exact set used by the model output.
+  if (options?.requireEvidenceRefsMatchUsed) {
+    const used = new Set<string>([...keyJudgmentRefs, ...bodyRefs, ...changeRefs]);
+    if (!used.size) return { ok: false, error: "No evidence refs were used in the output" };
+    for (const ref of evidenceRefsSet) {
+      if (!used.has(ref)) return { ok: false, error: `evidenceRefs includes unused ref: ${ref}` };
+    }
+    for (const ref of used) {
+      if (!evidenceRefsSet.has(ref)) return { ok: false, error: `evidenceRefs missing used ref: ${ref}` };
+    }
   }
 
   return {
