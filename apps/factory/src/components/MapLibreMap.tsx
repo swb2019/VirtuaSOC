@@ -26,6 +26,18 @@ export type MapSignal = {
   meta?: Record<string, unknown>;
 };
 
+export type MapEvidence = {
+  id: string;
+  title: string;
+  lat: number;
+  lon: number;
+  triageStatus: string;
+  tags: string[];
+  fetchedAt: string;
+  sourceType: string;
+  sourceUri: string | null;
+};
+
 export type RouteGeometry = {
   id: string;
   name: string;
@@ -42,9 +54,13 @@ export type MapLibreMapProps = {
   geofences: MapGeofence[];
   signals: MapSignal[];
   routes: RouteGeometry[];
+  evidence?: MapEvidence[];
   drawMode?: boolean;
   drawPoints?: [number, number][]; // [lon,lat]
   onMapClick?: (lonLat: [number, number]) => void;
+  onEvidenceClick?: (evidenceId: string) => void;
+  onViewportChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  focus?: { lat: number; lon: number; zoom?: number } | null;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -153,6 +169,23 @@ export function MapLibreMapView(props: MapLibreMapProps) {
     [props.signals],
   );
 
+  const evidenceFc = useMemo(() => {
+    const ev = props.evidence ?? [];
+    return asFeatureCollection(
+      ev.map((e) => ({
+        type: "Feature",
+        properties: {
+          id: e.id,
+          title: e.title,
+          triageStatus: e.triageStatus,
+          fetchedAt: e.fetchedAt,
+          sourceType: e.sourceType,
+        },
+        geometry: { type: "Point", coordinates: [e.lon, e.lat] },
+      })),
+    );
+  }, [props.evidence]);
+
   const geofencesFc = useMemo(
     () =>
       asFeatureCollection(
@@ -252,6 +285,71 @@ export function MapLibreMapView(props: MapLibreMapProps) {
         },
       });
 
+      // Evidence (clustered)
+      map.addSource("evidence", {
+        type: "geojson",
+        data: evidenceFc as any,
+        cluster: true,
+        clusterMaxZoom: 10,
+        clusterRadius: 52,
+      } as any);
+
+      map.addLayer({
+        id: "evidence-clusters",
+        type: "circle",
+        source: "evidence",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": [
+            "step",
+            ["get", "point_count"],
+            "#334155",
+            25,
+            "#475569",
+            100,
+            "#64748b",
+          ],
+          "circle-radius": ["step", ["get", "point_count"], 14, 25, 18, 100, 22],
+          "circle-opacity": 0.85,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#0b1220",
+        },
+      });
+
+      map.addLayer({
+        id: "evidence-cluster-count",
+        type: "symbol",
+        source: "evidence",
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": "{point_count_abbreviated}",
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-size": 12,
+        },
+        paint: { "text-color": "#e5e7eb" },
+      });
+
+      map.addLayer({
+        id: "evidence-unclustered",
+        type: "circle",
+        source: "evidence",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-radius": 4,
+          "circle-color": [
+            "case",
+            ["==", ["get", "triageStatus"], "new"],
+            "#22c55e",
+            ["==", ["get", "triageStatus"], "triaged"],
+            "#a1a1aa",
+            "#60a5fa",
+          ],
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#0b1220",
+          "circle-opacity": 0.8,
+        },
+      });
+
       // Routes (corridor visualization as a wide line in px; updated on zoom)
       map.addSource("routes", { type: "geojson", data: routesFc as any });
       map.addLayer({
@@ -283,6 +381,33 @@ export function MapLibreMapView(props: MapLibreMapProps) {
         source: "drawLine",
         paint: { "line-color": "#a78bfa", "line-width": 3, "line-dasharray": [2, 1] },
       });
+
+      // Evidence interactions
+      map.on("mouseenter", "evidence-unclustered", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "evidence-unclustered", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("click", "evidence-clusters", (e) => {
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["evidence-clusters"] });
+        const f = feats?.[0] as any;
+        const clusterId = f?.properties?.cluster_id;
+        const coords = f?.geometry?.coordinates;
+        if (clusterId == null || !coords) return;
+        const src: any = map.getSource("evidence");
+        if (!src?.getClusterExpansionZoom) return;
+        src.getClusterExpansionZoom(clusterId, (err: any, z: number) => {
+          if (err) return;
+          map.easeTo({ center: coords, zoom: z });
+        });
+      });
+      map.on("click", "evidence-unclustered", (e) => {
+        const f = (e.features?.[0] as any) ?? null;
+        const id = String(f?.properties?.id ?? "");
+        if (!id) return;
+        if (props.onEvidenceClick) props.onEvidenceClick(id);
+      });
     };
 
     map.on("load", onLoad);
@@ -301,9 +426,22 @@ export function MapLibreMapView(props: MapLibreMapProps) {
     };
     map.on("zoom", updateZoom);
 
+    const onMoveEnd = () => {
+      if (!props.onViewportChange) return;
+      const b = map.getBounds();
+      props.onViewportChange({
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      });
+    };
+    map.on("moveend", onMoveEnd);
+
     return () => {
       map.off("click", onClick);
       map.off("zoom", updateZoom);
+      map.off("moveend", onMoveEnd);
       map.remove();
       mapRef.current = null;
     };
@@ -324,6 +462,13 @@ export function MapLibreMapView(props: MapLibreMapProps) {
     const src = map.getSource("signals") as any;
     if (src) src.setData(signalsFc);
   }, [signalsFc]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("evidence") as any;
+    if (src) src.setData(evidenceFc);
+  }, [evidenceFc]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -358,6 +503,15 @@ export function MapLibreMapView(props: MapLibreMapProps) {
     const src = map.getSource("drawLine") as any;
     if (src) src.setData(drawLineFc);
   }, [drawLineFc]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!props.focus) return;
+    const { lat, lon, zoom: z } = props.focus;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    map.easeTo({ center: [lon, lat], zoom: typeof z === "number" ? z : map.getZoom() });
+  }, [props.focus]);
 
   return (
     <div className={props.className}>

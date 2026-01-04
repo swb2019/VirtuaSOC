@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { env } from "@/env";
 import { requireTenantDb } from "@/lib/tenantContext";
+import { getIngestQueue, JOB_EVIDENCE_ENRICH, JOB_PRODUCTS_GENERATE, JOB_SIGNALS_EVALUATE } from "@/lib/queue";
 import { MapDashboardClient } from "./MapDashboardClient";
 
 export const runtime = "nodejs";
@@ -45,9 +46,12 @@ function routeFromEntityMeta(meta: unknown): { coords: [number, number][]; corri
   return { coords, corridorKm: Number.isFinite(corridorKm) ? corridorKm : 5 };
 }
 
-export default async function MapPage() {
+export default async function MapPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   if (!env.featureFactoryApp || !env.featureRbac) redirect("/");
   if (!env.featureSignals) redirect("/");
+
+  const sp = (await searchParams) ?? {};
+  const initialEvidenceId = typeof sp?.e === "string" ? sp.e : null;
 
   const { tenant, tenantDb, membership } = await requireTenantDb("VIEWER");
 
@@ -133,6 +137,31 @@ export default async function MapPage() {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
+  const evidence = await tenantDb.evidenceItem.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { fetchedAt: "desc" },
+    take: 800,
+  });
+
+  const evidenceForMap = evidence
+    .map((e) => {
+      const g = geoFromEvidenceMeta(e.metadata);
+      if (!g) return null;
+      const title = e.title ?? e.summary?.slice(0, 120) ?? e.id;
+      return {
+        id: e.id,
+        title,
+        lat: g.lat,
+        lon: g.lon,
+        triageStatus: e.triageStatus,
+        tags: (e.tags ?? []).map(String),
+        fetchedAt: e.fetchedAt.toISOString(),
+        sourceType: e.sourceType,
+        sourceUri: e.sourceUri ?? null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
   async function createRoute(formData: FormData) {
     "use server";
     const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
@@ -192,6 +221,121 @@ export default async function MapPage() {
     redirect("/map");
   }
 
+  async function updateEvidence(formData: FormData) {
+    "use server";
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
+    const evidenceId = String(formData.get("evidenceId") ?? "").trim();
+    if (!evidenceId) throw new Error("evidenceId is required");
+
+    const triageStatusRaw = String(formData.get("triageStatus") ?? "").trim();
+    const triageStatus = triageStatusRaw === "triaged" ? "triaged" : triageStatusRaw === "new" ? "new" : null;
+    if (!triageStatus) throw new Error("triageStatus must be new|triaged");
+
+    const tagsRaw = String(formData.get("tags") ?? "");
+    const tags = Array.from(
+      new Set(
+        tagsRaw
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 40),
+      ),
+    );
+
+    const row = await tenantDb.evidenceItem.findFirst({ where: { tenantId: tenant.id, id: evidenceId } });
+    if (!row) throw new Error("Evidence not found");
+
+    await tenantDb.evidenceItem.update({
+      where: { id: row.id },
+      data: { triageStatus, tags },
+    });
+
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "evidence.updated.map",
+        actorUserId: membership.userId,
+        targetType: "evidence",
+        targetId: row.id,
+        metadata: { triageStatus, tagsCount: tags.length },
+      },
+    });
+
+    // Optional: trigger re-evaluation when tags/status change (idempotent worker side).
+    const runId = Date.now();
+    await getIngestQueue().add(
+      JOB_SIGNALS_EVALUATE,
+      { tenantId: tenant.id, evidenceId: row.id },
+      { jobId: `sig:${tenant.id}:${row.id}:map:${runId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+
+    redirect(`/map?e=${encodeURIComponent(row.id)}`);
+  }
+
+  async function enqueueEnrich(formData: FormData) {
+    "use server";
+    const { tenant, membership } = await requireTenantDb("ANALYST");
+    const evidenceId = String(formData.get("evidenceId") ?? "").trim();
+    if (!evidenceId) throw new Error("evidenceId is required");
+    const runId = Date.now();
+    await getIngestQueue().add(
+      JOB_EVIDENCE_ENRICH,
+      { tenantId: tenant.id, evidenceId, actorUserId: membership.userId, force: true },
+      { jobId: `enrich:${tenant.id}:${evidenceId}:map:${runId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+    redirect(`/map?e=${encodeURIComponent(evidenceId)}`);
+  }
+
+  async function enqueueSignalsEvaluate(formData: FormData) {
+    "use server";
+    const { tenant, membership } = await requireTenantDb("ANALYST");
+    const evidenceId = String(formData.get("evidenceId") ?? "").trim();
+    if (!evidenceId) throw new Error("evidenceId is required");
+    const runId = Date.now();
+    await getIngestQueue().add(
+      JOB_SIGNALS_EVALUATE,
+      { tenantId: tenant.id, evidenceId },
+      { jobId: `sig:${tenant.id}:${evidenceId}:map:${runId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "signals.evaluate.queued.map",
+        actorUserId: membership.userId,
+        targetType: "evidence",
+        targetId: evidenceId,
+        metadata: {},
+      },
+    });
+    redirect(`/map?e=${encodeURIComponent(evidenceId)}`);
+  }
+
+  async function draftFlashAlert(formData: FormData) {
+    "use server";
+    if (!env.featureProductFactory) throw new Error("Product Factory is not enabled");
+    const { tenant, tenantDb, membership } = await requireTenantDb("ANALYST");
+    const signalId = String(formData.get("signalId") ?? "").trim();
+    if (!signalId) throw new Error("signalId is required");
+
+    await getIngestQueue().add(
+      JOB_PRODUCTS_GENERATE,
+      { tenantId: tenant.id, productType: "flash_alert", signalId, actorUserId: membership.userId },
+      { jobId: `prodgen:${tenant.id}:flash_alert:sig:${signalId}`, removeOnComplete: 1000, removeOnFail: 1000 },
+    );
+    await tenantDb.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        action: "product.generation.queued.map",
+        actorUserId: membership.userId,
+        targetType: "signal",
+        targetId: signalId,
+        metadata: { productType: "flash_alert" },
+      },
+    });
+
+    redirect("/products");
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-10 text-zinc-100">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -237,7 +381,14 @@ export default async function MapPage() {
         geofences={geofencesForMap}
         signals={signalsForMap}
         routes={routesForMap}
+        evidence={evidenceForMap}
+        initialEvidenceId={initialEvidenceId}
         createRoute={createRoute}
+        updateEvidence={updateEvidence}
+        enqueueEnrich={enqueueEnrich}
+        enqueueSignalsEvaluate={enqueueSignalsEvaluate}
+        draftFlashAlert={draftFlashAlert}
+        productFactoryEnabled={env.featureProductFactory}
       />
     </div>
   );
