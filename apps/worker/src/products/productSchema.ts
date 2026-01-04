@@ -99,6 +99,10 @@ export function validateGeneratedProductJson(
   for (const ref of evidenceRefs) {
     if (!allowedEvidenceRefs.has(ref)) return { ok: false, error: `Invalid evidenceRef: ${ref}` };
   }
+  // evidenceRefs must cover any citations used in key judgments.
+  for (const ref of keyJudgmentRefs) {
+    if (!evidenceRefsSet.has(ref)) return { ok: false, error: `evidenceRefs missing ref used in keyJudgments: ${ref}` };
+  }
 
   const bodyMarkdown = typeof r.bodyMarkdown === "string" ? r.bodyMarkdown.trim() : "";
   if (!bodyMarkdown) return { ok: false, error: "Missing bodyMarkdown" };

@@ -364,7 +364,7 @@ async function ensureSeeded(db: Db, tenantId: string) {
       })},
       ${dailyTemplate},
       ${promptId},
-      ${db.json({ channels: ["email", "webhook", "teams"] })},
+      ${db.json({ channels: ["email", "webhook", "teams"], includeDocxEmailAttachment: true })},
       ${db.json({ requireReviewIfPerson: true })},
     ), (
       ${randomUUID()},
@@ -748,10 +748,20 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
     const providedRefs = new Set<string>(gen.evidenceRefs);
     const kjWithCitations = gen.keyJudgments.filter((s) => extractEvidenceRefs(s).length > 0).length;
 
+    const failures: string[] = [];
+    if (validateOptions.requireKeyJudgmentEvidenceRefs && kjWithCitations !== gen.keyJudgments.length) {
+      failures.push("keyJudgments_missing_evidence_refs");
+    }
+    if (validateOptions.requireEvidenceRefsMatchUsed) {
+      if (usedRefs.size !== providedRefs.size) failures.push("evidence_refs_count_mismatch");
+      for (const ref of usedRefs) if (!providedRefs.has(ref)) failures.push("evidence_refs_missing_used");
+      for (const ref of providedRefs) if (!usedRefs.has(ref)) failures.push("evidence_refs_include_unused");
+    }
+
     const quality = {
       version: 1,
       productType: cfg.product_type,
-      passed: true,
+      passed: failures.length === 0,
       generatedAt: new Date().toISOString(),
       rubric: {
         requireKeyJudgmentEvidenceRefs: Boolean(validateOptions.requireKeyJudgmentEvidenceRefs),
@@ -764,6 +774,7 @@ export async function generateProduct(db: Db, payload: GenerateProductJobPayload
         keyJudgments: gen.keyJudgments.length,
         keyJudgmentsWithCitations: kjWithCitations,
       },
+      failures,
       refs: {
         provided: Array.from(providedRefs).sort(),
         used: Array.from(usedRefs).sort(),

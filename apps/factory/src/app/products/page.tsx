@@ -182,7 +182,7 @@ export default async function ProductsPage() {
             "{{CHANGE_FROM_LAST_SECTION}}",
           ].join("\n"),
           promptVersionId: prompt.id,
-          distributionRules: { channels: ["email", "webhook", "teams"] } as any,
+          distributionRules: { channels: ["email", "webhook", "teams"], includeDocxEmailAttachment: true } as any,
           reviewPolicy: { requireReviewIfPerson: true } as any,
         },
         {
